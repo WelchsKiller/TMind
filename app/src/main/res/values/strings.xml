@@ -1,0 +1,98 @@
+<resources>
+    <string name="app_name">TMind</string>
+
+    <!-- Login -->
+    <string name="login_title">로그인</string>
+    <string name="login_hint">받으신 8자리 번호를 눌러주세요</string>
+    <string name="login_tts">로그인. 받으신 8자리 번호를 눌러주세요.</string>
+    <string name="key_clear">지움</string>
+    <string name="key_confirm">확인</string>
+    <string name="read_aloud">읽어주기</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">오늘 할 일</string>
+    <string name="dashboard_greeting">%1$s 님, 오늘도 함께해요</string>
+    <string name="mission_hrv">심박변이도 측정</string>
+    <string name="mission_hrv_sub">5분 안정 측정 후 결과 확인</string>
+    <string name="mission_ema">마음 상태 설문</string>
+    <string name="mission_ema_sub">지금 마음 상태를 알려 주세요</string>
+    <string name="mission_diary">마음일기</string>
+    <string name="mission_diary_sub">오늘 완료했어요</string>
+    <string name="mission_diary_active">오늘 하루를 말씀해 주세요</string>
+    <string name="mission_progress">오늘 미션 %1$d/3 완료</string>
+    <string name="mission_progress_session">%1$s 미션 %2$d/3 완료</string>
+    <string name="session_morning">오전</string>
+    <string name="session_afternoon">오후</string>
+    <string name="session_event">이벤트</string>
+    <string name="star_hint">오전·오후 미션 완료 시 별이 채워지고, 세 세션 모두 완료하면 금별이 됩니다</string>
+    <string name="history_survey">이전 설문 응답 보기</string>
+    <string name="history_analysis">이전 분석 결과 보기</string>
+    <string name="history_survey_title">이전 설문</string>
+    <string name="history_analysis_title">이전 분석 결과</string>
+    <string name="history_empty">아직 저장된 기록이 없습니다</string>
+    <string name="previous_analysis_section">이전 분석 결과</string>
+    <string name="previous_analysis_empty">이전에 저장된 분석 결과가 없습니다</string>
+    <string name="view_all_analysis">전체 보기</string>
+    <string name="redo_hrv_message">심박변이도 측정을 이미 완료하였습니다.\n다시 측정 하시겠습니까?</string>
+    <string name="redo_ema_message">마음 상태 설문이 이미 완료 되었습니다.\n다시 설문 하시겠습니까?</string>
+    <string name="redo_diary_message">마음일기가 작성되어 있습니다.\n다시 작성 하시겠습니까?</string>
+    <string name="dialog_yes">예</string>
+    <string name="dialog_no">아니요</string>
+
+    <!-- HRV -->
+    <string name="hrv_title">심박변이도 측정</string>
+    <string name="hrv_guide_title">측정 방법 안내</string>
+    <string name="hrv_guide_text">1. ECG 패치를 가슴에 부착해 주세요.\n\n2. 블루투스를 켜 주세요.\n   · 휴대폰 설정 → 블루투스 → 켜기\n   · 패치 전원이 켜져 있는지 확인\n   · 휴대폰과 패치가 가까이 있게 해주세요\n\n3. 편하게 앉아 5분간 가만히 계세요.\n\n4. 측정 중에는 말씀하지 마세요.</string>
+    <string name="hrv_skip">건너뛰기</string>
+    <string name="hrv_start">측정 시작</string>
+    <string name="hrv_instruction">편하게 앉아 말씀하지 마시고\n잠시 기다려 주세요</string>
+    <string name="time_remaining">남은 시간</string>
+    <string name="connecting_device">기기 연결 중입니다.</string>
+    <string name="measure_countdown">%d 측정이 시작됩니다</string>
+    <string name="measure_ready_buffer">연결되었습니다. 잠시 후 측정을 시작합니다</string>
+    <string name="measure_complete_title">측정 완료</string>
+    <string name="measure_complete_message">측정이 완료되었습니다.\n기기를 떼어주세요.</string>
+    <string name="hrv_result_explain">심박수는 1분당 심장 박동 수를 나타내는 \'심장 활동\'입니다. 심박변이도는 박동 사이 미세한 시간 차이를 통해 \'몸과 마음의 회복력·스트레스 상태\'를 보여주는 지표입니다.</string>
+    <string name="connect_failed">기기 연결에 실패했습니다</string>
+    <string name="signal_waiting">신호 대기 중</string>
+    <string name="ble_permission_denied">블루투스 권한이 필요합니다. 설정에서 허용해 주세요.</string>
+    <string name="ble_turn_on">블루투스를 켜 주세요.</string>
+    <string name="location_turn_on">위치 서비스를 켜 주세요. (BLE 연결에 필요)</string>
+    <string name="signal_good">신호 양호</string>
+    <string name="signal_good_hr">신호 양호 · %d bpm</string>
+    <string name="hrv_result_title">측정 결과</string>
+    <string name="confirm_result">확인</string>
+    <string name="confirm_result_hint">확인 버튼을 눌러 주세요</string>
+    <string name="bpm_label">심박수</string>
+    <string name="hrv_ms_label">심박변이도</string>
+    <string name="hrv_result_next">확인 후 다음으로</string>
+    <string name="next">다음</string>
+    <string name="prev">이전</string>
+
+    <!-- EMA -->
+    <string name="ema_title">마음 상태</string>
+    <string name="ema_intro_title">설문 안내</string>
+    <string name="ema_intro_body">이제부터 마음 상태에 대한 설문을 시작하겠습니다.\n\n총 %1$d 문항으로 구성되어 있으며, 각 문항에 대해 \'매우 많이 있었다\' ~ \'전혀 없었다\'의 5개 응답 중 가장 해당하는 응답을 골라주세요.</string>
+    <string name="ema_intro_start">설문 시작</string>
+
+    <!-- Voice Diary -->
+    <string name="diary_title">마음일기</string>
+    <string name="diary_instruction">오늘 하루에 대해 편하게 말씀해 주세요</string>
+    <string name="recording_idle">가운데 마이크 버튼을 눌러 녹음을 시작하세요</string>
+    <string name="recording_status">녹음 중입니다. 다 말씀하시면 가운데를 다시 누르세요</string>
+    <string name="recording_done">녹음이 완료되었습니다</string>
+
+    <!-- Analysis -->
+    <string name="analysis_title">분석 결과</string>
+    <string name="result_default">오늘 오전, 비교적 편안한 상태로 보여요 😊</string>
+    <string name="result_comfortable">오늘 오전, 비교적 편안한 상태로 보여요 😊</string>
+    <string name="result_moderate">오늘은 약간 긴장된 상태로 보여요</string>
+    <string name="result_tense">오늘은 다소 피로한 상태로 보여요</string>
+    <string name="disclaimer">의료 진단이 아닌 참고 정보예요</string>
+    <string name="feedback_question">실제로 이때 기분이 어떠셨나요?</string>
+    <string name="feedback_yes">네, 맞아요</string>
+    <string name="feedback_no">아니요, 달랐어요</string>
+    <string name="feedback_unknown">잘 기억나지 않아요</string>
+    <string name="mission_complete">오늘 미션 완료!</string>
+    <string name="go_home">홈으로</string>
+</resources>
