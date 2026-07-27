@@ -47,6 +47,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
     private int remainingSec = MEASURE_SEC;
     private boolean countdownStarted;
     private boolean measurementStarted;
+    private boolean connectingAnnounced;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean waitingBleReady;
@@ -130,6 +131,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
     private void resetMeasurementState() {
         measurementStarted = false;
         countdownStarted = false;
+        connectingAnnounced = false;
         remainingSec = MEASURE_SEC;
         handler.removeCallbacksAndMessages(null);
         countdownRunnable = null;
@@ -142,48 +144,69 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         tvSignal.setText(R.string.connecting_device);
         tvSignal.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
         circularProgress.setProgress(1f);
+        announceConnecting();
     }
 
     private void showConnectingUi() {
         tvTimerLabel.setText(R.string.connecting_device);
         tvSignal.setText(R.string.connecting_device);
         tvSignal.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+        announceConnecting();
+    }
+
+    private void announceConnecting() {
+        if (connectingAnnounced) return;
+        connectingAnnounced = true;
+        // TTS 초기화 직후일 수 있어 약간 지연
+        handler.postDelayed(() -> {
+            if (tts != null && !measurementStarted) {
+                tts.speak(getString(R.string.connecting_device));
+            }
+        }, 400);
     }
 
     private void beginMeasurementIfNeeded() {
         if (measurementStarted || svc == null) return;
         measurementStarted = true;
-        // 연결 직후 여유를 두고 3→2→1 안내 후 측정 시작
-        tvTimerLabel.setText(R.string.measure_ready_buffer);
-        tvSignal.setText(R.string.measure_ready_buffer);
-        tvSignal.setTextColor(ContextCompat.getColor(this, R.color.teal_primary));
-        if (tts != null) tts.speak(getString(R.string.measure_ready_buffer));
+        // 연결 직후 여유를 두고 3→2→1 → 「측정이 시작됩니다」 후 측정
         runPreStartCountdown(3);
     }
 
-    /** 측정 시작 전 3-2-1 카운트다운 (연결 직후 여유) */
+    /** 측정 시작 전 3-2-1 카운트다운 후 「측정이 시작됩니다」 안내 */
     private void runPreStartCountdown(int sec) {
         if (!bound || svc == null) {
             measurementStarted = false;
             return;
         }
         if (sec <= 0) {
-            if (svc.startMeasurement()) {
-                ecgView.clearStreaming();
-                tvTimerLabel.setText(R.string.time_remaining);
-                tvSignal.setText(R.string.signal_waiting);
-                tvSignal.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
-                startCountdownOnce();
-            } else {
-                measurementStarted = false;
-            }
+            String startMsg = getString(R.string.measure_starting);
+            tvTimer.setText("1");
+            tvTimerLabel.setText(startMsg);
+            tvSignal.setText(startMsg);
+            if (tts != null) tts.speak(startMsg);
+            // 안내 음성이 들릴 여유를 둔 뒤 실제 측정 시작
+            handler.postDelayed(() -> {
+                if (!bound || svc == null) {
+                    measurementStarted = false;
+                    return;
+                }
+                if (svc.startMeasurement()) {
+                    ecgView.clearStreaming();
+                    tvTimerLabel.setText(R.string.time_remaining);
+                    tvSignal.setText(R.string.signal_waiting);
+                    tvSignal.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+                    startCountdownOnce();
+                } else {
+                    measurementStarted = false;
+                }
+            }, 1500);
             return;
         }
-        String msg = getString(R.string.measure_countdown, sec);
-        tvTimer.setText(String.valueOf(sec));
-        tvTimerLabel.setText(msg);
-        tvSignal.setText(msg);
-        if (tts != null) tts.speak(String.valueOf(sec));
+        String num = String.valueOf(sec);
+        tvTimer.setText(num);
+        tvTimerLabel.setText(num);
+        tvSignal.setText(num);
+        if (tts != null) tts.speak(num);
         handler.postDelayed(() -> runPreStartCountdown(sec - 1), 1000);
     }
 

@@ -48,7 +48,8 @@
     <string name="hrv_instruction">편하게 앉아 말씀하지 마시고\n잠시 기다려 주세요</string>
     <string name="time_remaining">남은 시간</string>
     <string name="connecting_device">기기 연결 중입니다.</string>
-    <string name="measure_countdown">%d 측정이 시작됩니다</string>
+    <string name="measure_starting">측정이 시작됩니다</string>
+    <string name="measure_countdown">%d</string>
     <string name="measure_ready_buffer">연결되었습니다. 잠시 후 측정을 시작합니다</string>
     <string name="measure_complete_title">측정 완료</string>
     <string name="measure_complete_message">측정이 완료되었습니다.\n기기를 떼어주세요.</string>

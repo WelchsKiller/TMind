@@ -45,7 +45,10 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
             tvBpm.setVisibility(View.GONE);
         }
         if (savedInstanceState == null) {
-            HistoryStore.addAnalysis(this, message, bpm, hrv);
+            long at = LastEcgResult.measuredAtMs > 0
+                    ? LastEcgResult.measuredAtMs
+                    : System.currentTimeMillis();
+            HistoryStore.addAnalysis(this, message, bpm, hrv, at);
         }
 
         bindPreviousAnalysis();

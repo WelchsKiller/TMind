@@ -32,9 +32,35 @@ public final class HistoryStore {
     }
 
     public static void addAnalysis(Context ctx, String message, int bpm, int hrvMs) {
+        addAnalysis(ctx, message, bpm, hrvMs, System.currentTimeMillis());
+    }
+
+    /**
+     * 측정 시각(measureAt) 기준 중복 방지.
+     * HRV 결과 화면에서 저장하고, 이후 분석결과 화면에서 같은 측정이면 메시지만 갱신.
+     */
+    public static void addAnalysis(Context ctx, String message, int bpm, int hrvMs, long measureAt) {
         try {
+            long ts = measureAt > 0 ? measureAt : System.currentTimeMillis();
+            SharedPreferences sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+            JSONArray arr = new JSONArray(sp.getString(KEY_ANALYSIS, "[]"));
+
+            // 동일 측정 시각(±2초)이면 메시지/수치 갱신만
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject old = arr.getJSONObject(i);
+                long oldTs = old.optLong("ts", 0);
+                if (Math.abs(oldTs - ts) < 2000L) {
+                    old.put("message", message);
+                    old.put("bpm", bpm);
+                    old.put("hrvMs", hrvMs);
+                    old.put("ts", ts);
+                    sp.edit().putString(KEY_ANALYSIS, arr.toString()).apply();
+                    return;
+                }
+            }
+
             JSONObject row = new JSONObject();
-            row.put("ts", System.currentTimeMillis());
+            row.put("ts", ts);
             row.put("message", message);
             row.put("bpm", bpm);
             row.put("hrvMs", hrvMs);
