@@ -77,6 +77,23 @@ public final class HistoryStore {
         return load(ctx, KEY_ANALYSIS);
     }
 
+    /** 설문 히스토리에서 시각으로 1건 조회 */
+    public static JSONObject findEmaByTs(Context ctx, long ts) {
+        if (ts <= 0) return null;
+        for (JSONObject row : loadEma(ctx)) {
+            if (Math.abs(row.optLong("ts", 0) - ts) < 2) {
+                return row;
+            }
+        }
+        // 동일 초 단위 매칭 완화
+        for (JSONObject row : loadEma(ctx)) {
+            if (Math.abs(row.optLong("ts", 0) - ts) < 2000L) {
+                return row;
+            }
+        }
+        return null;
+    }
+
     private static void prepend(Context ctx, String key, JSONObject row) throws Exception {
         SharedPreferences sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
         JSONArray arr = new JSONArray(sp.getString(key, "[]"));

@@ -49,6 +49,7 @@
         <activity android:name=".ui.EmaSurveyActivity" />
         <activity android:name=".ui.EmaIntroActivity" />
         <activity android:name=".ui.HistoryListActivity" />
+        <activity android:name=".ui.SurveyDetailActivity" />
         <activity android:name=".ui.VoiceDiaryActivity" />
         <activity android:name=".ui.AnalysisResultActivity" />
         <activity android:name=".ui.FeedbackActivity" />

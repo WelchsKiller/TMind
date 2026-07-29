@@ -6,28 +6,119 @@
     android:orientation="vertical"
     android:padding="20dp">
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
-        <ImageButton android:id="@+id/btnBack" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_back" />
-        <TextView android:id="@+id/tvTitle" style="@style/SeniorTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:text="@string/ema_title" />
-        <ImageButton android:id="@+id/btnTts" android:layout_width="56dp" android:layout_height="56dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_speaker" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical">
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back" />
+        <TextView
+            android:id="@+id/tvTitle"
+            style="@style/SeniorTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/ema_title" />
+        <ImageButton
+            android:id="@+id/btnTts"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_speaker" />
     </LinearLayout>
 
-    <ProgressBar android:id="@+id/progressBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="8dp" android:layout_marginTop="16dp" android:progressTint="@color/teal_primary" />
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="10dp"
+        android:layout_marginTop="12dp"
+        android:progressTint="@color/teal_primary" />
 
-    <TextView android:id="@+id/tvProgress" style="@style/SeniorBody" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="1 / 9" />
+    <TextView
+        android:id="@+id/tvProgress"
+        style="@style/SeniorBody"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="1 / 9" />
 
-    <TextView android:id="@+id/tvQuestion" style="@style/SeniorTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:textSize="26sp" />
+    <TextView
+        android:id="@+id/tvQuestion"
+        style="@style/SeniorTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:textSize="24sp" />
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="16dp" android:orientation="vertical">
-        <include android:id="@+id/opt1" layout="@layout/item_ema_option" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp" />
-        <include android:id="@+id/opt2" layout="@layout/item_ema_option" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp" />
-        <include android:id="@+id/opt3" layout="@layout/item_ema_option" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp" />
-        <include android:id="@+id/opt4" layout="@layout/item_ema_option" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp" />
-        <include android:id="@+id/opt5" layout="@layout/item_ema_option" android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_weight="1">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <include android:id="@+id/opt1" layout="@layout/item_ema_option" />
+            <include android:id="@+id/opt2" layout="@layout/item_ema_option" />
+            <include android:id="@+id/opt3" layout="@layout/item_ema_option" />
+            <include android:id="@+id/opt4" layout="@layout/item_ema_option" />
+            <include android:id="@+id/opt5" layout="@layout/item_ema_option" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_disclaimer_bar"
+        android:orientation="vertical"
+        android:padding="12dp">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/ema_tip_title"
+            android:textColor="@color/teal_dark"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/ema_tip_body"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
     </LinearLayout>
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="horizontal">
-        <Button android:id="@+id/btnPrev" style="@style/SeniorButton" android:layout_width="0dp" android:layout_height="60dp" android:layout_marginEnd="8dp" android:layout_weight="1" android:background="@drawable/bg_btn_outline" android:text="@string/prev" android:textColor="@color/teal_dark" />
-        <Button android:id="@+id/btnNext" style="@style/SeniorButton" android:layout_width="0dp" android:layout_height="60dp" android:layout_weight="1" android:background="@drawable/bg_btn_primary" android:text="@string/next" android:textColor="@color/white" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+        <Button
+            android:id="@+id/btnPrev"
+            style="@style/SeniorButton"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_btn_outline"
+            android:text="@string/prev"
+            android:textColor="@color/teal_dark" />
+        <Button
+            android:id="@+id/btnNext"
+            style="@style/SeniorButton"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_btn_primary"
+            android:text="@string/next"
+            android:textColor="@color/white" />
     </LinearLayout>
 </LinearLayout>

@@ -3,12 +3,32 @@
     android:id="@+id/optRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_ema_option"
     android:gravity="center_vertical"
     android:minHeight="56dp"
     android:orientation="horizontal"
-    android:padding="16dp">
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
 
-    <TextView android:id="@+id/optEmoji" android:layout_width="40dp" android:layout_height="wrap_content" android:gravity="center" android:text="😐" android:textSize="28sp" />
-    <TextView android:id="@+id/optLabel" style="@style/SeniorBody" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_weight="1" android:textSize="18sp" />
+    <ImageView
+        android:id="@+id/optEmoji"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter"
+        android:src="@drawable/emoji_3" />
+
+    <TextView
+        android:id="@+id/optLabel"
+        style="@style/SeniorBody"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:textSize="18sp" />
+
+    <View
+        android:id="@+id/optRadio"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:background="@drawable/bg_radio_unchecked" />
 </LinearLayout>

@@ -114,13 +114,13 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         ecgView.setDrawAxisLabels(false);
         ecgView.setWaveColor(Color.parseColor("#006666"));
 
-        findViewById(R.id.btnBack).setOnClickListener(v -> exitMeasureScreen());
+        findViewById(R.id.btnBack).setOnClickListener(v -> confirmExitMeasure());
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvInstruction);
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                exitMeasureScreen();
+                confirmExitMeasure();
             }
         });
 
@@ -208,6 +208,15 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         tvSignal.setText(num);
         if (tts != null) tts.speak(num);
         handler.postDelayed(() -> runPreStartCountdown(sec - 1), 1000);
+    }
+
+    private void confirmExitMeasure() {
+        if (tts != null) tts.stop();
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setMessage(R.string.confirm_exit_measure)
+                .setPositiveButton(R.string.dialog_end, (d, w) -> exitMeasureScreen())
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .show();
     }
 
     private void exitMeasureScreen() {

@@ -15,43 +15,77 @@
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/prev"
             android:src="@drawable/ic_back" />
         <TextView
             android:id="@+id/tvTitle"
             style="@style/SeniorTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:text="@string/ema_intro_title" />
+            android:gravity="center"
+            android:text="@string/ema_intro_title"
+            android:textSize="24sp" />
         <ImageButton
             android:id="@+id/btnTts"
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/read_aloud"
             android:src="@drawable/ic_speaker" />
     </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="28dp"
+        android:background="@drawable/bg_session_chip"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:text="@string/ema_intro_tag"
+        android:textColor="@color/teal_dark"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="20dp"
+        android:text="📋"
+        android:textSize="48sp" />
+
+    <TextView
+        android:id="@+id/tvLead"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:text="@string/ema_intro_lead"
+        android:textColor="@color/black"
+        android:textSize="20sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/tvIntro"
         style="@style/SeniorBody"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="16dp"
         android:layout_weight="1"
-        android:background="@drawable/bg_info_box"
+        android:gravity="center_horizontal"
         android:lineSpacingExtra="6dp"
-        android:padding="20dp"
-        android:textSize="20sp" />
+        android:textSize="18sp" />
 
     <Button
         android:id="@+id/btnStart"
         style="@style/SeniorButton"
         android:layout_width="match_parent"
         android:layout_height="60dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="8dp"
         android:background="@drawable/bg_btn_primary"
         android:text="@string/ema_intro_start"
         android:textColor="@color/white" />

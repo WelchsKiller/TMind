@@ -1,5 +1,7 @@
 package com.nest.tmind.util;
 
+import com.nest.tmind.R;
+
 import java.util.Calendar;
 
 /**
@@ -21,12 +23,19 @@ public final class EmaQuestionBank {
         public final String key;
         public final String[] scaleLabels;
         public final boolean emotionScale;
+        /** 부정 정서 문항: 매우 그렇다=빨강(부정), 전혀=초록(긍정) */
+        public final boolean negativeValence;
 
         public Item(String prompt, String key, String[] scaleLabels, boolean emotionScale) {
+            this(prompt, key, scaleLabels, emotionScale, false);
+        }
+
+        public Item(String prompt, String key, String[] scaleLabels, boolean emotionScale, boolean negativeValence) {
             this.prompt = prompt;
             this.key = key;
             this.scaleLabels = scaleLabels;
             this.emotionScale = emotionScale;
+            this.negativeValence = negativeValence;
         }
     }
 
@@ -61,12 +70,10 @@ public final class EmaQuestionBank {
     private EmaQuestionBank() {
     }
 
-    /** 현재 시각 기준 일일 EMA 세션 타입 */
+    /** 현재 시각 기준 일일 EMA (메인): 오전/오후. 추가는 EVENT 별도. */
     public static SessionType dailyTypeNow() {
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        if (hour < 12) return SessionType.MORNING;
-        if (hour < 17) return SessionType.EVENT;
-        return SessionType.AFTERNOON;
+        return hour < 12 ? SessionType.MORNING : SessionType.AFTERNOON;
     }
 
     public static Item[] itemsFor(SessionType type) {
@@ -87,15 +94,36 @@ public final class EmaQuestionBank {
     }
 
     public static String[] emojisFor(Item item) {
-        return item.emotionScale ? EMOJIS_AGREE : EMOJIS_INTENSITY;
+        if (!item.emotionScale) return EMOJIS_INTENSITY;
+        return item.negativeValence
+                ? new String[]{"😢", "🙁", "😐", "🙂", "😊"}
+                : EMOJIS_AGREE;
     }
 
-    /** displayIndex 0~4 에 대한 구분 색상 (ARGB) */
+    /**
+     * 화면 위→아래 displayIndex 0~4 에 대응하는 drawable.
+     * emoji_1=빨강(부정) … emoji_5=초록(긍정)
+     */
+    public static int drawableResFor(Item item, int displayIndex) {
+        if (displayIndex < 0 || displayIndex > 4) return R.drawable.emoji_3;
+        // bad→good 순서면 index 0 = emoji_1, 4 = emoji_5
+        // good→bad 순서(긍정 정서)면 반대로
+        boolean badToGood = !item.emotionScale || item.negativeValence;
+        int emojiNum = badToGood ? (displayIndex + 1) : (5 - displayIndex);
+        switch (emojiNum) {
+            case 1: return R.drawable.emoji_1;
+            case 2: return R.drawable.emoji_2;
+            case 3: return R.drawable.emoji_3;
+            case 4: return R.drawable.emoji_4;
+            default: return R.drawable.emoji_5;
+        }
+    }
+
+    /** displayIndex 0~4 에 대한 구분 색상 (ARGB) — 레거시/텍스트용 */
     public static int colorFor(Item item, int displayIndex) {
         if (displayIndex < 0 || displayIndex > 4) return 0xFF757575;
-        // emotion(동의): 매우 그렇다=긍정(녹) … 전혀=부정(적)
-        // intensity: 매우 많이=부정(적) … 전혀 없음=긍정(녹)
-        int[] palette = item.emotionScale ? COLORS_GOOD_TO_BAD : COLORS_BAD_TO_GOOD;
+        if (!item.emotionScale) return COLORS_BAD_TO_GOOD[displayIndex];
+        int[] palette = item.negativeValence ? COLORS_BAD_TO_GOOD : COLORS_GOOD_TO_BAD;
         return palette[displayIndex];
     }
 
@@ -163,24 +191,24 @@ public final class EmaQuestionBank {
 
     private static Item[] emotionBlock() {
         return new Item[]{
-                agree("지금 이 순간, 나는 행복하다", "happy"),
-                agree("지금 이 순간, 나는 답답하거나 좌절스럽다", "frustrated"),
-                agree("지금 이 순간, 나는 슬프다", "sad"),
-                agree("지금 이 순간, 나는 걱정된다", "worried"),
-                agree("지금 이 순간, 나는 안절부절못한다", "restless"),
-                agree("지금 이 순간, 나는 신나거나 들떠 있다", "excited"),
-                agree("지금 이 순간, 나는 차분하다", "calm"),
-                agree("지금 이 순간, 나는 지루하다", "bored"),
-                agree("지금 이 순간, 나는 몸과 마음이 쳐진다", "sluggish")
+                agree("지금 이 순간, 나는 행복하다", "happy", false),
+                agree("지금 이 순간, 나는 답답하거나 좌절스럽다", "frustrated", true),
+                agree("지금 이 순간, 나는 슬프다", "sad", true),
+                agree("지금 이 순간, 나는 걱정된다", "worried", true),
+                agree("지금 이 순간, 나는 안절부절못한다", "restless", true),
+                agree("지금 이 순간, 나는 신나거나 들떠 있다", "excited", false),
+                agree("지금 이 순간, 나는 차분하다", "calm", false),
+                agree("지금 이 순간, 나는 지루하다", "bored", true),
+                agree("지금 이 순간, 나는 몸과 마음이 쳐진다", "sluggish", true)
         };
     }
 
     private static Item intensity(String prompt, String key) {
-        return new Item(prompt, key, SCALE_INTENSITY, false);
+        return new Item(prompt, key, SCALE_INTENSITY, false, false);
     }
 
-    private static Item agree(String prompt, String key) {
-        return new Item(prompt, key, SCALE_AGREE, true);
+    private static Item agree(String prompt, String key, boolean negative) {
+        return new Item(prompt, key, SCALE_AGREE, true, negative);
     }
 
     private static Item[] concat(Item[] a, Item[] b) {

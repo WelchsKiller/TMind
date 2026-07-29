@@ -16,7 +16,7 @@ import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.util.SessionManager;
 
-/** APP-USR-002: 오늘 할 일 — 오전/오후/이벤트 세션별 미션 + 주간 별 */
+/** 오늘의 기록 — 시각 자동 세션 + 추가 측정 + 주간 별 */
 public class DashboardActivity extends BaseSeniorActivity {
 
     private MissionManager mission;
@@ -24,7 +24,6 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private View cardHrv, cardEma, cardDiary;
     private TextView tvGreeting, tvProgress;
-    private TextView chipMorning, chipEvent, chipAfternoon;
     private LinearLayout starRow;
     private ProgressBar progressBar;
 
@@ -39,6 +38,8 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
         setContentView(R.layout.activity_dashboard);
         mission = new MissionManager(this);
+        // 대시보드 복귀 시 추가측정 모드 해제 → 현재 시각 세션
+        mission.setAdditionalMeasureMode(false);
 
         tvGreeting = findViewById(R.id.tvGreeting);
         tvProgress = findViewById(R.id.tvProgress);
@@ -46,9 +47,6 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardEma = findViewById(R.id.cardEma);
         cardDiary = findViewById(R.id.cardDiary);
         progressBar = findViewById(R.id.progressBar);
-        chipMorning = findViewById(R.id.chipMorning);
-        chipEvent = findViewById(R.id.chipEvent);
-        chipAfternoon = findViewById(R.id.chipAfternoon);
         starRow = findViewById(R.id.starRow);
 
         setupMissionCard(cardHrv, R.drawable.ic_heart, R.string.mission_hrv, R.string.mission_hrv_sub);
@@ -58,13 +56,10 @@ public class DashboardActivity extends BaseSeniorActivity {
         tvGreeting.setText(getString(R.string.dashboard_greeting, session.getUserName()));
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvGreeting, R.id.tvProgress);
 
-        chipMorning.setOnClickListener(v -> switchSession(MissionManager.Session.MORNING));
-        chipEvent.setOnClickListener(v -> switchSession(MissionManager.Session.EVENT));
-        chipAfternoon.setOnClickListener(v -> switchSession(MissionManager.Session.AFTERNOON));
-
-        cardHrv.setOnClickListener(v -> onHrvClick());
-        cardEma.setOnClickListener(v -> onEmaClick());
-        cardDiary.setOnClickListener(v -> onDiaryClick());
+        cardHrv.setOnClickListener(v -> onHrvClick(false));
+        cardEma.setOnClickListener(v -> onEmaClick(false));
+        cardDiary.setOnClickListener(v -> onDiaryClick(false));
+        findViewById(R.id.cardAdditional).setOnClickListener(v -> openAdditional());
 
         findViewById(R.id.btnHistorySurvey).setOnClickListener(v ->
                 startActivity(new Intent(this, HistoryListActivity.class)
@@ -81,20 +76,31 @@ public class DashboardActivity extends BaseSeniorActivity {
     protected void onResume() {
         super.onResume();
         mission = new MissionManager(this);
+        mission.setAdditionalMeasureMode(false);
         refreshUi();
     }
 
-    private void switchSession(MissionManager.Session s) {
-        MissionManager.Session prev = mission.getActiveSession();
-        mission.setActiveSession(s);
-        // 새 세션으로 전환 시 카드 색/체크는 세션별 상태로 다시 그림(초기화 효과)
-        if (prev != s) {
-            session.saveEmaProgress(0, new int[16]);
+    private void openAdditional() {
+        mission.setAdditionalMeasureMode(true);
+        // 추가 측정: 미완료 미션부터 안내 (HRV 가이드)
+        if (!mission.isHrvDone()) {
+            openHrv();
+        } else if (!mission.isEmaDone()) {
+            openEma();
+        } else if (!mission.isDiaryDone()) {
+            openDiary();
+        } else {
+            showRedoDialog(R.string.redo_hrv_message, () -> {
+                mission.clearHrv();
+                mission.clearEma();
+                mission.clearDiary();
+                openHrv();
+            });
         }
-        refreshUi();
     }
 
-    private void onHrvClick() {
+    private void onHrvClick(boolean extra) {
+        if (!extra) mission.setAdditionalMeasureMode(false);
         if (mission.isHrvDone()) {
             showRedoDialog(R.string.redo_hrv_message, () -> {
                 mission.clearHrv();
@@ -105,7 +111,8 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
     }
 
-    private void onEmaClick() {
+    private void onEmaClick(boolean extra) {
+        if (!extra) mission.setAdditionalMeasureMode(false);
         if (mission.isEmaDone()) {
             showRedoDialog(R.string.redo_ema_message, () -> {
                 mission.clearEma();
@@ -117,7 +124,8 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
     }
 
-    private void onDiaryClick() {
+    private void onDiaryClick(boolean extra) {
+        if (!extra) mission.setAdditionalMeasureMode(false);
         if (mission.isDiaryDone()) {
             showRedoDialog(R.string.redo_diary_message, () -> {
                 mission.clearDiary();
@@ -169,10 +177,6 @@ public class DashboardActivity extends BaseSeniorActivity {
         progressBar.setMax(3);
         progressBar.setProgress(done);
 
-        styleChip(chipMorning, active == MissionManager.Session.MORNING);
-        styleChip(chipEvent, active == MissionManager.Session.EVENT);
-        styleChip(chipAfternoon, active == MissionManager.Session.AFTERNOON);
-
         applyCardState(cardHrv, mission.isHrvDone(active), R.drawable.bg_mission_card_active);
         applyCardState(cardEma, mission.isEmaDone(active), R.drawable.bg_mission_card_ema);
         applyCardState(cardDiary, mission.isDiaryDone(active), R.drawable.bg_mission_card_diary);
@@ -185,31 +189,28 @@ public class DashboardActivity extends BaseSeniorActivity {
         renderStars();
     }
 
-    private void styleChip(TextView chip, boolean selected) {
-        chip.setBackgroundResource(selected
-                ? R.drawable.bg_session_chip_selected
-                : R.drawable.bg_session_chip);
-        chip.setTextColor(ContextCompat.getColor(this,
-                selected ? R.color.white : R.color.teal_dark));
-    }
-
     private void renderStars() {
         starRow.removeAllViews();
         float d = getResources().getDisplayMetrics().density;
-        int size = (int) (28 * d);
-        int pad = (int) (4 * d);
+        int size = (int) (36 * d);
+        int pad = (int) (3 * d);
         for (int i = 0; i < 7; i++) {
             ImageView iv = new ImageView(this);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
             lp.setMargins(pad, 0, pad, 0);
             iv.setLayoutParams(lp);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            iv.setAdjustViewBounds(true);
             int state = mission.getStarState(i);
-            if (state >= 2) {
-                iv.setImageResource(R.drawable.ic_star_gold);
-            } else if (state == 1) {
-                iv.setImageResource(R.drawable.ic_star_filled);
+            // star_1=반, star_2=특수(반짝), star_3=가득, star_4=빈
+            if (state >= MissionManager.STAR_BONUS) {
+                iv.setImageResource(R.drawable.star_2);
+            } else if (state >= MissionManager.STAR_FULL) {
+                iv.setImageResource(R.drawable.star_3);
+            } else if (state >= MissionManager.STAR_HALF) {
+                iv.setImageResource(R.drawable.star_1);
             } else {
-                iv.setImageResource(R.drawable.ic_star_empty);
+                iv.setImageResource(R.drawable.star_4);
             }
             starRow.addView(iv);
         }

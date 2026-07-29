@@ -23,7 +23,8 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:text="@string/history_survey_title" />
+            android:text="@string/history_survey_title"
+            android:textSize="22sp" />
         <ImageButton
             android:id="@+id/btnTts"
             android:layout_width="56dp"
@@ -31,6 +32,21 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_speaker" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvDateChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_session_chip_selected"
+        android:paddingStart="18dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="10dp"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/tvEmpty"

@@ -54,8 +54,15 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
         waveformView = findViewById(R.id.waveformView);
         btnRecord = findViewById(R.id.btnRecord);
 
-        findViewById(R.id.btnBack).setOnClickListener(v -> finish());
+        findViewById(R.id.btnBack).setOnClickListener(v -> confirmExit());
         setupTtsFromViews(R.id.btnTts, R.id.tvInstruction);
+
+        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                confirmExit();
+            }
+        });
 
         micPermLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
@@ -75,6 +82,29 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
 
         updateTimer();
         tvStatus.setText(R.string.recording_idle);
+    }
+
+    private void confirmExit() {
+        if (tts != null) tts.stop();
+        // 녹음 중이 아니어도 일기 화면 이탈 확인
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setMessage(R.string.confirm_exit_diary)
+                .setPositiveButton(R.string.dialog_end, (d, w) -> {
+                    if (recording) {
+                        try {
+                            if (recorder != null) {
+                                recorder.stop();
+                                recorder.release();
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        recorder = null;
+                        recording = false;
+                    }
+                    finish();
+                })
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .show();
     }
 
     private void toggleRecording() {

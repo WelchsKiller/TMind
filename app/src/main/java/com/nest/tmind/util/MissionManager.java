@@ -9,14 +9,20 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * 오늘 미션: 오전 / 오후 / 이벤트(수시) 세션별 3종(HRV·EMA·일기).
- * 주간 별: 오전 또는 오후 완료 시 별 채움, 3세션 모두 완료 시 금별.
+ * 오늘 미션: 오전/오후는 시각으로 자동 결정, 추가는 EVENT 세션.
+ * 주간 별: 오전 0.5 + 오후 0.5 = 가득, 추가측정까지 하면 특수(금) 별.
  */
 public class MissionManager {
 
     public enum Session {
         MORNING, AFTERNOON, EVENT
     }
+
+    /** 0=빈, 1=반, 2=가득, 3=가득+특수(추가측정) */
+    public static final int STAR_EMPTY = 0;
+    public static final int STAR_HALF = 1;
+    public static final int STAR_FULL = 2;
+    public static final int STAR_BONUS = 3;
 
     private static final String PREF = "tmind_mission_v2";
 
@@ -26,43 +32,60 @@ public class MissionManager {
     public MissionManager(Context ctx) {
         sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
         todayKey = new SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(new Date());
-        ensureSessionMigrated();
+        // 항상 현재 시각 기준 메인 세션으로 동기화 (수동 탭 선택 금지)
+        syncMainSessionByHour();
     }
 
-    private void ensureSessionMigrated() {
-        String active = sp.getString(todayKey + "_active_session", null);
-        if (active == null) {
-            setActiveSession(currentSessionByHour());
+    /** 메인 미션용: 오전/오후만 (12시 기준). 추가는 별도. */
+    public static Session mainSessionByHour() {
+        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        return hour < 12 ? Session.MORNING : Session.AFTERNOON;
+    }
+
+    /** @deprecated 메인 미션은 mainSessionByHour 사용. EVENT는 추가 측정 전용. */
+    public static Session currentSessionByHour() {
+        return mainSessionByHour();
+    }
+
+    public void syncMainSessionByHour() {
+        Session main = mainSessionByHour();
+        // 추가 측정 중이 아니면 메인 세션으로 고정
+        String forced = sp.getString(todayKey + "_force_event", null);
+        if ("1".equals(forced)) {
+            sp.edit().putString(todayKey + "_active_session", Session.EVENT.name()).apply();
+        } else {
+            sp.edit().putString(todayKey + "_active_session", main.name()).apply();
         }
     }
 
-    public static Session currentSessionByHour() {
-        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        if (hour < 12) return Session.MORNING;
-        if (hour < 17) return Session.EVENT;
-        return Session.AFTERNOON;
+    /** 추가 측정 모드 진입/해제 */
+    public void setAdditionalMeasureMode(boolean on) {
+        sp.edit().putString(todayKey + "_force_event", on ? "1" : null)
+                .putString(todayKey + "_active_session",
+                        on ? Session.EVENT.name() : mainSessionByHour().name())
+                .apply();
+    }
+
+    public boolean isAdditionalMeasureMode() {
+        return "1".equals(sp.getString(todayKey + "_force_event", null));
     }
 
     public Session getActiveSession() {
+        syncMainSessionByHour();
         String v = sp.getString(todayKey + "_active_session", Session.MORNING.name());
         try {
             return Session.valueOf(v);
         } catch (Exception e) {
-            return Session.MORNING;
+            return mainSessionByHour();
         }
     }
 
     public void setActiveSession(Session session) {
-        Session prev = null;
-        try {
-            String p = sp.getString(todayKey + "_active_session", null);
-            if (p != null) prev = Session.valueOf(p);
-        } catch (Exception ignored) {
-        }
-        sp.edit().putString(todayKey + "_active_session", session.name()).apply();
-        // 세션이 바뀌면 카드 상태는 세션별 저장값을 쓰므로 별도 clear 불필요
-        if (prev != null && prev != session) {
-            // no-op: UI가 세션별 상태를 읽음
+        // 수동 전환 비활성: 추가측정만 허용
+        if (session == Session.EVENT) {
+            setAdditionalMeasureMode(true);
+        } else {
+            setAdditionalMeasureMode(false);
         }
     }
 
@@ -121,7 +144,6 @@ public class MissionManager {
         sp.edit().putBoolean(k(getActiveSession(), "diary"), false).apply();
     }
 
-    /** 세션 카드 색 초기화(재시작) */
     public void resetActiveSessionMissions() {
         Session s = getActiveSession();
         sp.edit()
@@ -151,36 +173,29 @@ public class MissionManager {
         return getCompletedCount(s) >= 3;
     }
 
-    public boolean isAmOrPmDoneToday() {
-        return isSessionAllDone(Session.MORNING) || isSessionAllDone(Session.AFTERNOON);
-    }
-
-    public boolean isAllThreeSessionsDoneToday() {
-        return isSessionAllDone(Session.MORNING)
-                && isSessionAllDone(Session.AFTERNOON)
-                && isSessionAllDone(Session.EVENT);
-    }
-
     private void updateStarsAfterProgress() {
-        int dayIndex = dayOfWeekIndex(); // 0=월 … 6=일
-        if (isAllThreeSessionsDoneToday()) {
-            setStarState(dayIndex, 2); // gold
-        } else if (isAmOrPmDoneToday()) {
-            int cur = getStarState(dayIndex);
-            if (cur < 1) setStarState(dayIndex, 1); // filled
+        int dayIndex = dayOfWeekIndex();
+        boolean am = isSessionAllDone(Session.MORNING);
+        boolean pm = isSessionAllDone(Session.AFTERNOON);
+        boolean extra = isSessionAllDone(Session.EVENT);
+
+        int state = STAR_EMPTY;
+        if (am && pm) {
+            state = extra ? STAR_BONUS : STAR_FULL;
+        } else if (am || pm) {
+            state = STAR_HALF;
         }
+        // 이미 더 높은 상태면 유지하지 않고 재계산 결과로 덮어씀
+        setStarState(dayIndex, state);
     }
 
-    /** 0=월 … 6=일 */
     public static int dayOfWeekIndex() {
         int cal = Calendar.getInstance().get(Calendar.DAY_OF_WEEK);
-        // Calendar: SUN=1 … SAT=7 → Mon=0
         return (cal + 5) % 7;
     }
 
-    /** 0=empty, 1=filled, 2=gold */
     public int getStarState(int dayIndex) {
-        return sp.getInt(weekKey() + "_star_" + dayIndex, 0);
+        return sp.getInt(weekKey() + "_star_" + dayIndex, STAR_EMPTY);
     }
 
     private void setStarState(int dayIndex, int state) {
@@ -201,7 +216,7 @@ public class MissionManager {
             case AFTERNOON:
                 return "오후";
             default:
-                return "이벤트";
+                return "추가";
         }
     }
 }
