@@ -29,11 +29,14 @@ import java.util.Random;
 /** APP-USR-008: 음성 일기 (최대 3분, AAC 16kHz) */
 public class VoiceDiaryActivity extends BaseSeniorActivity {
 
+    public static final String EXTRA_EDIT_MODE = "edit_mode";
+
     private static final int MAX_SEC = 3 * 60;
 
     private MediaRecorder recorder;
     private File audioFile;
     private boolean recording;
+    private boolean editMode;
     private int elapsedSec;
     private TextView tvTimer, tvStatus;
     private VoiceWaveformView waveformView;
@@ -48,6 +51,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_voice_diary);
+        editMode = getIntent().getBooleanExtra(EXTRA_EDIT_MODE, false);
 
         tvTimer = findViewById(R.id.tvTimer);
         tvStatus = findViewById(R.id.tvStatus);
@@ -81,7 +85,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
         });
 
         updateTimer();
-        tvStatus.setText(R.string.recording_idle);
+        tvStatus.setText(editMode ? R.string.diary_edit_hint : R.string.recording_idle);
     }
 
     private void confirmExit() {
@@ -155,14 +159,16 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
             payload.put("path", audioFile != null ? audioFile.getAbsolutePath() : "");
             payload.put("durationSec", elapsedSec);
             payload.put("sampleRate", 16000);
-            new DataQueueManager(this).enqueue("voice_diary", payload);
+            payload.put("editMode", editMode);
+            new DataQueueManager(this).enqueue(editMode ? "voice_diary_edit" : "voice_diary", payload);
             new DataQueueManager(this).flushIfOnline();
         } catch (Exception ignored) {
         }
 
         new MissionManager(this).setDiaryDone();
         MissionManager mission = new MissionManager(this);
-        if (mission.isAllDone()) {
+        // 수정 모드에서는 분석 화면으로 가지 않고 홈으로
+        if (!editMode && mission.isAllDone()) {
             startActivity(new Intent(this, AnalysisResultActivity.class));
         } else {
             Intent i = new Intent(this, DashboardActivity.class);

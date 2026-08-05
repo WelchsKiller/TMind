@@ -28,8 +28,13 @@
     <string name="session_event">추가</string>
     <string name="star_hint">오전·오후 미션을 각각 완료하면 별이 채워지고, 추가 측정까지 하면 특별 별이 됩니다</string>
     <string name="additional_measure_title">추가 측정</string>
-    <string name="additional_measure_sub">마음상태를 추가로 기록할 수 있어요.</string>
+    <string name="additional_measure_sub">심박변이도 측정을 추가로 진행할 수 있어요.</string>
+    <string name="additional_measure_locked">심박변이도 측정을 먼저 완료하면 이용할 수 있어요.</string>
+    <string name="additional_measure_need_hrv">심박변이도 측정을 먼저 완료해 주세요</string>
     <string name="mission_already_done">이미 완료한 미션입니다</string>
+    <string name="mission_edit_confirm">이미 완료된 미션입니다.\n수정하시겠습니까?</string>
+    <string name="dialog_edit">수정</string>
+    <string name="diary_edit_hint">이전에 녹음한 일기가 있습니다.\n다시 녹음하면 내용이 수정됩니다.</string>
     <string name="confirm_exit_missions">미션을 완수하지 않으셨습니다. 종료하시겠습니까?</string>
     <string name="weekly_trend_button">7일 정서 추이 보기</string>
     <string name="weekly_trend_title">7일 정서 추이</string>
@@ -69,6 +74,8 @@
     <string name="hrv_result_title">측정 결과</string>
     <string name="confirm_result">확인</string>
     <string name="confirm_result_hint">확인 버튼을 눌러 주세요</string>
+    <string name="hrv_result_invalid">측정값이 정상적으로 나오지 않았습니다.\n다시 측정해 주세요.</string>
+    <string name="hrv_remeasure">재측정</string>
     <string name="bpm_label">심박수</string>
     <string name="hrv_ms_label">심박변이도</string>
     <string name="bpm_unit_format">%1$d 회/분</string>

@@ -1,13 +1,13 @@
 package com.nest.tmind.ui;
 
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 
 import com.nest.tmind.R;
@@ -26,6 +26,8 @@ public class HrvResultActivity extends BaseSeniorActivity {
 
     private EcgSurfaceView ecgView;
     private TextView tvBpm, tvHrvMs, tvDate;
+    private Button btnNext;
+    private boolean resultValid;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,6 +38,7 @@ public class HrvResultActivity extends BaseSeniorActivity {
         tvBpm = findViewById(R.id.tvBpm);
         tvHrvMs = findViewById(R.id.tvHrvMs);
         tvDate = findViewById(R.id.tvDate);
+        btnNext = findViewById(R.id.btnNext);
 
         ecgView.setDrawGrid(false);
         ecgView.setDrawAxisLabels(false);
@@ -48,17 +51,17 @@ public class HrvResultActivity extends BaseSeniorActivity {
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvBpmLabel, R.id.tvBpm,
                 R.id.tvHrvLabel, R.id.tvHrvMs, R.id.tvExplain);
 
-        Button btnNext = findViewById(R.id.btnNext);
-        btnNext.setText(R.string.confirm_result);
-        btnNext.setOnClickListener(v -> {
-            new MissionManager(this).setHrvDone();
-            goDashboard();
-        });
+        btnNext.setOnClickListener(v -> onConfirmOrRemeasure());
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                Toast.makeText(HrvResultActivity.this, R.string.confirm_result_hint, Toast.LENGTH_SHORT).show();
+                if (resultValid) {
+                    Toast.makeText(HrvResultActivity.this, R.string.confirm_result_hint, Toast.LENGTH_SHORT).show();
+                } else {
+                    // 비정상 결과는 미션 미완료로 두고 홈으로
+                    goDashboard();
+                }
             }
         });
     }
@@ -70,18 +73,35 @@ public class HrvResultActivity extends BaseSeniorActivity {
         bindLatestResult();
     }
 
-    private void bindLatestResult() {
-        LastEcgResult.loadFromPrefs(this);
-
-        int hr = 0;
-        int hrv = 0;
-        long at = 0L;
-
-        if (LastEcgResult.measuredAtMs > 0) {
-            hr = LastEcgResult.lastHrBpm;
-            hrv = LastEcgResult.lastHrvMs;
-            at = LastEcgResult.measuredAtMs;
+    private void onConfirmOrRemeasure() {
+        if (!resultValid) {
+            new AlertDialog.Builder(this)
+                    .setMessage(R.string.hrv_result_invalid)
+                    .setPositiveButton(R.string.hrv_remeasure, (d, w) -> goRemeasure())
+                    .setNegativeButton(R.string.dialog_cancel, null)
+                    .show();
+            return;
         }
+        new MissionManager(this).setHrvDone();
+        goDashboard();
+    }
+
+    private void goRemeasure() {
+        Intent i = new Intent(this, HrvGuideActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(i);
+        finish();
+    }
+
+    private void bindLatestResult() {
+        // 분석 직후 메모리 값이 있으면 prefs 재로드로 덮어쓰지 않음
+        if (!LastEcgResult.hasValid()) {
+            LastEcgResult.loadFromPrefs(this);
+        }
+
+        int hr = LastEcgResult.lastHrBpm;
+        int hrv = LastEcgResult.lastHrvMs;
+        long at = LastEcgResult.measuredAtMs;
 
         // 세션 평균이 남아 있으면(분석 직후) 우선 반영
         int sessionHr = MeasureSessionStats.averageHr();
@@ -94,14 +114,33 @@ public class HrvResultActivity extends BaseSeniorActivity {
         if (hr > 0 && (hr < 40 || hr > 180)) hr = 0;
         if (hrv < 0) hrv = 0;
 
+        // 세션/메모리에 값이 있는데 LastEcgResult가 비어 있으면 보강 저장
+        if ((hr > 0 || hrv > 0) && !LastEcgResult.hasValid()) {
+            int stress = 0;
+            if (hrv > 0) {
+                int hrvForScore = Math.max(20, Math.min(160, hrv));
+                stress = Math.round(((160f - hrvForScore) / 140f) * 100f);
+            }
+            LastEcgResult.updateAndSave(this, LastEcgResult.lastSpike, 250, hr, hrv,
+                    hr > 0 ? Math.round(60000f / hr) : 0, stress, at);
+        }
+
+        resultValid = hr > 0 && hrv > 0;
+
         tvBpm.setText(hr > 0 ? String.valueOf(hr) : "--");
         tvHrvMs.setText(hrv > 0 ? String.valueOf(hrv) : "--");
         tvDate.setText(EcgConfig.formatMeasuredTime(at));
 
-        // 측정 완료 시점에 분석 히스토리 저장 (사분면 좌표 포함)
-        RussellEmotionCalculator.Point point = RussellEmotionCalculator.fromHrvStress(
-                LastEcgResult.lastStressScore, hrv, hr);
-        HistoryStore.addAnalysis(this, "", hr, hrv, at, point.valence, point.arousal);
+        if (btnNext != null) {
+            btnNext.setText(resultValid ? R.string.confirm_result : R.string.hrv_remeasure);
+        }
+
+        // 정상 결과만 분석 히스토리 저장
+        if (resultValid) {
+            RussellEmotionCalculator.Point point = RussellEmotionCalculator.fromHrvStress(
+                    LastEcgResult.lastStressScore, hrv, hr);
+            HistoryStore.addAnalysis(this, "", hr, hrv, at, point.valence, point.arousal);
+        }
 
         if (LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
             float[] spike = LastEcgResult.lastSpike;

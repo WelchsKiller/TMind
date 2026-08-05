@@ -60,10 +60,11 @@ public class MissionManager {
 
     /** 추가 측정 모드 진입/해제 */
     public void setAdditionalMeasureMode(boolean on) {
+        // commit: 직후 isHrvDone() 등이 EVENT 세션을 보도록 동기 반영
         sp.edit().putString(todayKey + "_force_event", on ? "1" : null)
                 .putString(todayKey + "_active_session",
                         on ? Session.EVENT.name() : mainSessionByHour().name())
-                .apply();
+                .commit();
     }
 
     public boolean isAdditionalMeasureMode() {

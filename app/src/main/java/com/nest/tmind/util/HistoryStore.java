@@ -79,6 +79,17 @@ public final class HistoryStore {
         return toList(loadArray(ctx, KEY_EMA, KEY_EMA_LEGACY));
     }
 
+    /** 해당 세션의 가장 최근 설문 (수정 시 기존 답 복원용) */
+    public static JSONObject latestEmaForSession(Context ctx, String sessionType) {
+        if (sessionType == null) return null;
+        for (JSONObject row : loadEma(ctx)) {
+            if (sessionType.equals(row.optString("sessionType", ""))) {
+                return row;
+            }
+        }
+        return null;
+    }
+
     public static List<JSONObject> loadAnalysis(Context ctx) {
         return toList(loadArray(ctx, KEY_ANALYSIS, KEY_ANALYSIS_LEGACY));
     }

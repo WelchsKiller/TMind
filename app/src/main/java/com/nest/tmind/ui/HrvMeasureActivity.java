@@ -22,6 +22,7 @@ import com.nest.tmind.ecg.EcgBleService;
 import com.nest.tmind.ecg.EcgResultAnalyzer;
 import com.nest.tmind.ecg.EcgSurfaceView;
 import com.nest.tmind.ecg.LastEcgResult;
+import com.nest.tmind.ecg.MeasureSessionStats;
 import com.nest.tmind.ecg.pref.AppVerifyStorage;
 import com.nest.tmind.ecg.MetricsManager;
 import com.nest.tmind.ecg.model.AppVerifyResult;
@@ -364,7 +365,21 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         MetricsManager.getInstance().recordJobFinished(true);
         // BLE 종료 전에 분석·저장해야 재측정 시 결과가 갱신됨
         saveMetrics();
-        EcgResultAnalyzer.analyze(this);
+        EcgResultAnalyzer.Result analyzed = EcgResultAnalyzer.analyze(this);
+        // 세션 평균만 있고 분석 실패한 경우에도 결과 화면용으로 강제 저장
+        if (analyzed == null || !analyzed.valid) {
+            int hr = MeasureSessionStats.averageHr();
+            int hrv = MeasureSessionStats.averageHrvMs();
+            if (hr > 0 || hrv > 0) {
+                int stress = 0;
+                if (hrv > 0) {
+                    int hrvForScore = Math.max(20, Math.min(160, hrv));
+                    stress = Math.round(((160f - hrvForScore) / 140f) * 100f);
+                }
+                LastEcgResult.updateAndSave(this, new float[0], 250, hr, hrv,
+                        hr > 0 ? Math.round(60000f / hr) : 0, stress, System.currentTimeMillis());
+            }
+        }
         stopBleCompletely();
 
         String boxMsg = getString(R.string.measure_complete_message);

@@ -64,16 +64,21 @@ public class LastEcgResult {
 
     // ────────────── SharedPreferences에서 마지막 결과 로드 ──────────────
     public static void loadFromPrefs(Context ctx) {
+        // 이미 메모리에 유효 결과가 있으면 prefs로 덮어쓰지 않음 (결과 화면 공백 방지)
+        boolean keepMemory = hasValid();
+
         SharedPreferences sp = ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         String js = readPref(sp, KEY_LAST);
         if (js == null) {
-            lastSpike = null;
-            lastFs = 0;
-            lastHrBpm = 0;
-            lastHrvMs = 0;
-            lastRrMs = 0;
-            lastStressScore = 0;
-            measuredAtMs = 0L;
+            if (!keepMemory) {
+                lastSpike = null;
+                lastFs = 0;
+                lastHrBpm = 0;
+                lastHrvMs = 0;
+                lastRrMs = 0;
+                lastStressScore = 0;
+                measuredAtMs = 0L;
+            }
             return;
         }
 
@@ -97,13 +102,16 @@ public class LastEcgResult {
             }
 
         } catch (JSONException e) {
-            lastSpike = null;
-            lastFs = 0;
-            lastHrBpm = 0;
-            lastHrvMs = 0;
-            lastRrMs = 0;
-            lastStressScore = 0;
-            measuredAtMs = 0L;
+            // prefs 파싱 실패 시 메모리 유효값 유지
+            if (!keepMemory) {
+                lastSpike = null;
+                lastFs = 0;
+                lastHrBpm = 0;
+                lastHrvMs = 0;
+                lastRrMs = 0;
+                lastStressScore = 0;
+                measuredAtMs = 0L;
+            }
         }
     }
 
@@ -156,10 +164,12 @@ public class LastEcgResult {
 
         // history 읽어서 append
         JSONArray hist;
-        String jsHist = readPref(sp, KEY_HISTORY);
+        String jsHist = sp.getString(KEY_HISTORY, null);
         if (jsHist != null) {
             try {
-                hist = new JSONArray(jsHist);
+                // 암호화 레거시 호환
+                String plain = AesCrypto.decryptOrPlain(jsHist);
+                hist = new JSONArray(plain);
             } catch (JSONException e) {
                 hist = new JSONArray();
             }
@@ -178,16 +188,24 @@ public class LastEcgResult {
         } catch (JSONException ignored) {
         }
 
+        // 측정 결과(파형 포함)는 평문 저장 — 암호문 복호화 실패 시 결과 화면이 비는 문제 방지
         sp.edit()
-                .putString(KEY_LAST, AesCrypto.encryptSafe(ctx, last.toString()))
-                .putString(KEY_HISTORY, AesCrypto.encryptSafe(ctx, hist.toString()))
-                .apply();
+                .putString(KEY_LAST, last.toString())
+                .putString(KEY_HISTORY, hist.toString())
+                .commit();
     }
 
     private static String readPref(SharedPreferences sp, String key) {
         String v = sp.getString(key, null);
         if (v == null) return null;
-        return AesCrypto.decryptOrPlain(v);
+        // 과거 AES 저장분 호환
+        String plain = AesCrypto.decryptOrPlain(v);
+        if (plain != null && (plain.trim().startsWith("{") || plain.trim().startsWith("["))) {
+            return plain;
+        }
+        // 복호화 실패로 ciphertext가 그대로면 null 취급 (메모리 유효값 유지용)
+        if (v.trim().startsWith("{") || v.trim().startsWith("[")) return v;
+        return null;
     }
 
     // ────────────── 특정 날짜(자정 기준) 히스토리 로드 ──────────────

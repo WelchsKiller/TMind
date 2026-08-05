@@ -25,12 +25,14 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
 
     public static final String EXTRA_FEEDBACK_RESELECT = "feedback_reselect";
     public static final String EXTRA_SESSION_TYPE = "session_type";
+    public static final String EXTRA_EDIT_MODE = "edit_mode";
 
     public static final String[] QUESTIONS = new String[9];
 
     private EmaQuestionBank.Item[] items;
     private EmaQuestionBank.SessionType sessionType;
     private boolean feedbackReselect;
+    private boolean editMode;
 
     private int currentIndex = 0;
     private int[] answers;
@@ -46,6 +48,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         session = new SessionManager(this);
 
         feedbackReselect = getIntent().getBooleanExtra(EXTRA_FEEDBACK_RESELECT, false);
+        editMode = getIntent().getBooleanExtra(EXTRA_EDIT_MODE, false);
         String typeExtra = getIntent().getStringExtra(EXTRA_SESSION_TYPE);
         if (typeExtra != null) {
             sessionType = EmaQuestionBank.SessionType.valueOf(typeExtra);
@@ -61,7 +64,10 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         }
 
         answers = new int[items.length];
-        if (!feedbackReselect) {
+        if (editMode) {
+            loadAnswersFromHistory();
+            currentIndex = 0;
+        } else if (!feedbackReselect) {
             int[] saved = session.loadEmaAnswers(items.length);
             if (saved != null && saved.length == items.length) {
                 answers = saved;
@@ -103,6 +109,33 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
                 .setPositiveButton(R.string.dialog_end, (d, w) -> finish())
                 .setNegativeButton(R.string.dialog_cancel, null)
                 .show();
+    }
+
+    private void loadAnswersFromHistory() {
+        JSONObject row = HistoryStore.latestEmaForSession(this, sessionType.name());
+        if (row != null) {
+            JSONObject ans = row.optJSONObject("answers");
+            if (ans == null) ans = row;
+            for (int i = 0; i < items.length; i++) {
+                int v = ans.optInt(items[i].key, 0);
+                if (v >= 1 && v <= 5) answers[i] = v;
+            }
+        }
+        // 히스토리 없으면 세션에 남은 답 사용
+        boolean any = false;
+        for (int a : answers) {
+            if (a > 0) {
+                any = true;
+                break;
+            }
+        }
+        if (!any) {
+            int[] saved = session.loadEmaAnswers(items.length);
+            if (saved != null && saved.length == items.length) {
+                answers = saved;
+            }
+        }
+        session.saveEmaProgress(0, answers);
     }
 
     private static EmaQuestionBank.Item[] emotionOnly() {
@@ -218,7 +251,8 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
                 payload.put("valence", gt.valence);
                 payload.put("arousal", gt.arousal);
             }
-            new DataQueueManager(this).enqueue(feedbackReselect ? "ema_feedback" : "ema", payload);
+            new DataQueueManager(this).enqueue(
+                    feedbackReselect ? "ema_feedback" : (editMode ? "ema_edit" : "ema"), payload);
             new DataQueueManager(this).flushIfOnline();
             if (!feedbackReselect) {
                 HistoryStore.addEma(this, sessionType.name(), payload);
@@ -235,7 +269,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         }
 
         new MissionManager(this).setEmaDone();
-        session.saveEmaProgress(0, new int[items.length]);
+        session.saveEmaProgress(0, answers); // 수정 후에도 답 유지 (다음 수정 시 복원 보조)
         goDashboard();
     }
 

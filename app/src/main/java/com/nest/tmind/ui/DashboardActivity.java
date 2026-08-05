@@ -24,8 +24,8 @@ public class DashboardActivity extends BaseSeniorActivity {
     private MissionManager mission;
     private SessionManager session;
 
-    private View cardHrv, cardEma, cardDiary;
-    private TextView tvGreeting, tvProgress;
+    private View cardHrv, cardEma, cardDiary, cardAdditional;
+    private TextView tvGreeting, tvProgress, tvAdditionalSub;
     private LinearLayout starRow;
     private ProgressBar progressBar;
     private View btnWeeklyTrend;
@@ -48,6 +48,8 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardHrv = findViewById(R.id.cardHrv);
         cardEma = findViewById(R.id.cardEma);
         cardDiary = findViewById(R.id.cardDiary);
+        cardAdditional = findViewById(R.id.cardAdditional);
+        tvAdditionalSub = findViewById(R.id.tvAdditionalSub);
         progressBar = findViewById(R.id.progressBar);
         starRow = findViewById(R.id.starRow);
         btnWeeklyTrend = findViewById(R.id.btnWeeklyTrend);
@@ -62,7 +64,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardHrv.setOnClickListener(v -> onHrvClick());
         cardEma.setOnClickListener(v -> onEmaClick());
         cardDiary.setOnClickListener(v -> onDiaryClick());
-        findViewById(R.id.cardAdditional).setOnClickListener(v -> openAdditional());
+        cardAdditional.setOnClickListener(v -> openAdditional());
         btnWeeklyTrend.setOnClickListener(v ->
                 startActivity(new Intent(this, WeeklyTrendActivity.class)));
 
@@ -98,19 +100,19 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void openAdditional() {
-        mission.setAdditionalMeasureMode(true);
-        if (!mission.isHrvDone()) {
-            openHrv();
-        } else if (!mission.isEmaDone()) {
-            openEma();
-        } else if (!mission.isDiaryDone()) {
-            openDiary();
-        } else {
-            mission.clearHrv();
-            mission.clearEma();
-            mission.clearDiary();
-            openHrv();
+        if (!isAdditionalUnlocked()) {
+            Toast.makeText(this, R.string.additional_measure_need_hrv, Toast.LENGTH_SHORT).show();
+            return;
         }
+        // 추가 측정은 심박변이도만 진행
+        mission.setAdditionalMeasureMode(true);
+        openHrv();
+    }
+
+    /** 오늘 오전/오후 중 심박변이도 미션을 한 번이라도 완료하면 추가 측정 가능 */
+    private boolean isAdditionalUnlocked() {
+        return mission.isHrvDone(MissionManager.Session.MORNING)
+                || mission.isHrvDone(MissionManager.Session.AFTERNOON);
     }
 
     private void onHrvClick() {
@@ -125,7 +127,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void onEmaClick() {
         mission.setAdditionalMeasureMode(false);
         if (mission.isEmaDone()) {
-            Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
+            showEditMissionDialog(this::openEmaForEdit);
         } else {
             openEma();
         }
@@ -134,10 +136,18 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void onDiaryClick() {
         mission.setAdditionalMeasureMode(false);
         if (mission.isDiaryDone()) {
-            Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
+            showEditMissionDialog(this::openDiaryForEdit);
         } else {
             openDiary();
         }
+    }
+
+    private void showEditMissionDialog(Runnable onEdit) {
+        new AlertDialog.Builder(this)
+                .setMessage(R.string.mission_edit_confirm)
+                .setPositiveButton(R.string.dialog_edit, (d, w) -> onEdit.run())
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .show();
     }
 
     private void openHrv() {
@@ -147,6 +157,14 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void openEma() {
         Intent i = new Intent(this, EmaIntroActivity.class);
         i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, mapEmaSession().name());
+        startActivity(i);
+    }
+
+    private void openEmaForEdit() {
+        EmaQuestionBank.SessionType type = mapEmaSession();
+        Intent i = new Intent(this, EmaSurveyActivity.class);
+        i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, type.name());
+        i.putExtra(EmaSurveyActivity.EXTRA_EDIT_MODE, true);
         startActivity(i);
     }
 
@@ -163,6 +181,12 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void openDiary() {
         startActivity(new Intent(this, VoiceDiaryActivity.class));
+    }
+
+    private void openDiaryForEdit() {
+        Intent i = new Intent(this, VoiceDiaryActivity.class);
+        i.putExtra(VoiceDiaryActivity.EXTRA_EDIT_MODE, true);
+        startActivity(i);
     }
 
     private void refreshUi() {
@@ -184,7 +208,23 @@ public class DashboardActivity extends BaseSeniorActivity {
 
         btnWeeklyTrend.setVisibility(session.isStudyEnded() ? View.VISIBLE : View.GONE);
 
+        refreshAdditionalCard();
         renderStars();
+    }
+
+    private void refreshAdditionalCard() {
+        boolean unlocked = isAdditionalUnlocked();
+        cardAdditional.setEnabled(unlocked);
+        cardAdditional.setClickable(true);
+        cardAdditional.setAlpha(unlocked ? 1f : 0.45f);
+        tvAdditionalSub.setText(unlocked
+                ? R.string.additional_measure_sub
+                : R.string.additional_measure_locked);
+        if (unlocked) {
+            cardAdditional.setBackgroundResource(R.drawable.bg_btn_outline);
+        } else {
+            cardAdditional.setBackgroundResource(R.drawable.bg_mission_card_completed);
+        }
     }
 
     private void renderStars() {
