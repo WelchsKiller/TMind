@@ -41,6 +41,9 @@
     <string name="weekly_trend_subtitle">연구 기간 동안의 심박변이도 기반 정서 위치를 보여 줍니다</string>
     <string name="weekly_trend_legend">점이 진할수록 최근 날짜입니다 · 가로=감정(부정적–긍정적), 세로=강도(약함–강함)</string>
     <string name="weekly_trend_empty">아직 저장된 측정 기록이 없습니다</string>
+    <string name="russell_example_title">예시 감정</string>
+    <string name="russell_example_joy">😄  기쁨 · 긍정적 + 강함</string>
+    <string name="russell_example_sad">😔  우울 · 부정적 + 약함</string>
     <string name="dialog_yes">예</string>
     <string name="dialog_no">아니요</string>
     <string name="dialog_end">종료</string>

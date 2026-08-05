@@ -166,15 +166,10 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
         }
 
         new MissionManager(this).setDiaryDone();
-        MissionManager mission = new MissionManager(this);
-        // 수정 모드에서는 분석 화면으로 가지 않고 홈으로
-        if (!editMode && mission.isAllDone()) {
-            startActivity(new Intent(this, AnalysisResultActivity.class));
-        } else {
-            Intent i = new Intent(this, DashboardActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(i);
-        }
+        // 분석(사분면)은 측정 결과 확인 후 표시. 일기 완료 시에는 홈으로.
+        Intent i = new Intent(this, DashboardActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(i);
         finish();
     }
 

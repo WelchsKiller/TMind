@@ -83,7 +83,9 @@ public class HrvResultActivity extends BaseSeniorActivity {
             return;
         }
         new MissionManager(this).setHrvDone();
-        goDashboard();
+        // 측정 확인 후 HRV 기반 4사분면(분석 결과) 화면으로 이동
+        startActivity(new Intent(this, AnalysisResultActivity.class));
+        finish();
     }
 
     private void goRemeasure() {

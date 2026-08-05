@@ -71,6 +71,12 @@
             android:textColor="@color/text_secondary"
             android:textSize="14sp" />
 
+        <include
+            layout="@layout/include_russell_examples"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" />
+
         <LinearLayout
             android:id="@+id/dayList"
             android:layout_width="match_parent"

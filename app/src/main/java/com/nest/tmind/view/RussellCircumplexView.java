@@ -205,9 +205,9 @@ public class RussellCircumplexView extends View {
         }
     }
 
-    /** 사분면별 감정 이모지 배경 */
+    /** 사분면별 감정 이모지 — 끝단 배치, 배경용으로 옅게 */
     private void drawQuadrantEmojis(Canvas canvas, float cx, float cy, float half) {
-        float q = half * 0.48f;
+        float q = half * 0.78f;
         emojiPaint.setTextSize(dp(36));
         emojiPaint.setAlpha(255);
         // 배경용으로 전체 사분면 이모지를 옅게 (약 28% 불투명)

@@ -119,17 +119,18 @@ public class MissionManager {
     }
 
     public void setHrvDone() {
-        sp.edit().putBoolean(k(getActiveSession(), "hrv"), true).apply();
+        // commit: 대시보드 onResume에서 추가모드 해제 전에 별 상태가 반영되도록
+        sp.edit().putBoolean(k(getActiveSession(), "hrv"), true).commit();
         updateStarsAfterProgress();
     }
 
     public void setEmaDone() {
-        sp.edit().putBoolean(k(getActiveSession(), "ema"), true).apply();
+        sp.edit().putBoolean(k(getActiveSession(), "ema"), true).commit();
         updateStarsAfterProgress();
     }
 
     public void setDiaryDone() {
-        sp.edit().putBoolean(k(getActiveSession(), "diary"), true).apply();
+        sp.edit().putBoolean(k(getActiveSession(), "diary"), true).commit();
         updateStarsAfterProgress();
     }
 
@@ -178,15 +179,20 @@ public class MissionManager {
         int dayIndex = dayOfWeekIndex();
         boolean am = isSessionAllDone(Session.MORNING);
         boolean pm = isSessionAllDone(Session.AFTERNOON);
-        boolean extra = isSessionAllDone(Session.EVENT);
+        // 추가 측정은 HRV만 진행하므로 EVENT HRV 완료 = 추가 측정 완료
+        boolean extra = isHrvDone(Session.EVENT);
 
         int state = STAR_EMPTY;
         if (am && pm) {
             state = extra ? STAR_BONUS : STAR_FULL;
         } else if (am || pm) {
-            state = STAR_HALF;
+            // 오전·오후 한쪽만 끝난 뒤 추가 측정을 해도 반은 유지하되,
+            // 추가까지 했으면 특수 별로 표시해 변화를 알 수 있게 함
+            state = extra ? STAR_BONUS : STAR_HALF;
+        } else if (extra) {
+            // 메인 미션 없이 추가만 한 경우(비정상 경로)에도 표시
+            state = STAR_BONUS;
         }
-        // 이미 더 높은 상태면 유지하지 않고 재계산 결과로 덮어씀
         setStarState(dayIndex, state);
     }
 
@@ -200,7 +206,7 @@ public class MissionManager {
     }
 
     private void setStarState(int dayIndex, int state) {
-        sp.edit().putInt(weekKey() + "_star_" + dayIndex, state).apply();
+        sp.edit().putInt(weekKey() + "_star_" + dayIndex, state).commit();
     }
 
     private String weekKey() {
