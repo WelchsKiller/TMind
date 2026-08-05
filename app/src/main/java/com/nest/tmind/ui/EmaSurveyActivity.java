@@ -15,6 +15,7 @@ import com.nest.tmind.util.DataQueueManager;
 import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.MissionManager;
+import com.nest.tmind.util.RussellEmotionCalculator;
 import com.nest.tmind.util.SessionManager;
 
 import org.json.JSONObject;
@@ -98,7 +99,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     private void confirmExit() {
         if (tts != null) tts.stop();
         new AlertDialog.Builder(this)
-                .setMessage(R.string.confirm_exit_survey)
+                .setMessage(R.string.confirm_exit_missions)
                 .setPositiveButton(R.string.dialog_end, (d, w) -> finish())
                 .setNegativeButton(R.string.dialog_cancel, null)
                 .show();
@@ -207,8 +208,15 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             JSONObject payload = new JSONObject();
             payload.put("sessionType", sessionType.name());
             payload.put("feedbackReselect", feedbackReselect);
+            java.util.HashMap<String, Integer> emoMap = new java.util.HashMap<>();
             for (int i = 0; i < items.length; i++) {
                 payload.put(items[i].key, answers[i]);
+                emoMap.put(items[i].key, answers[i]);
+            }
+            RussellEmotionCalculator.Point gt = RussellEmotionCalculator.fromEmaAnswers(emoMap);
+            if (gt != null) {
+                payload.put("valence", gt.valence);
+                payload.put("arousal", gt.arousal);
             }
             new DataQueueManager(this).enqueue(feedbackReselect ? "ema_feedback" : "ema", payload);
             new DataQueueManager(this).flushIfOnline();

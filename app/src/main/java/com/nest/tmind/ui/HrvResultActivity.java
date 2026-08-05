@@ -8,6 +8,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.content.ContextCompat;
 
 import com.nest.tmind.R;
 import com.nest.tmind.ecg.EcgConfig;
@@ -16,6 +17,7 @@ import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ecg.MeasureSessionStats;
 import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.MissionManager;
+import com.nest.tmind.util.RussellEmotionCalculator;
 
 import java.util.Arrays;
 
@@ -39,7 +41,7 @@ public class HrvResultActivity extends BaseSeniorActivity {
         ecgView.setDrawAxisLabels(false);
         ecgView.setSpeed(25f);
         ecgView.setGain(10f);
-        ecgView.setWaveColor(Color.parseColor("#006666"));
+        ecgView.setWaveColor(ContextCompat.getColor(this, R.color.teal_primary));
 
         bindLatestResult();
 
@@ -96,9 +98,10 @@ public class HrvResultActivity extends BaseSeniorActivity {
         tvHrvMs.setText(hrv > 0 ? String.valueOf(hrv) : "--");
         tvDate.setText(EcgConfig.formatMeasuredTime(at));
 
-        // 측정 완료 시점에 분석 히스토리 저장 (미션 3/3 전에도 기록되도록)
-        String msg = buildAnalysisMessage(LastEcgResult.lastStressScore);
-        HistoryStore.addAnalysis(this, msg, hr, hrv, at);
+        // 측정 완료 시점에 분석 히스토리 저장 (사분면 좌표 포함)
+        RussellEmotionCalculator.Point point = RussellEmotionCalculator.fromHrvStress(
+                LastEcgResult.lastStressScore, hrv, hr);
+        HistoryStore.addAnalysis(this, "", hr, hrv, at, point.valence, point.arousal);
 
         if (LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
             float[] spike = LastEcgResult.lastSpike;
@@ -120,13 +123,6 @@ public class HrvResultActivity extends BaseSeniorActivity {
         i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(i);
         finish();
-    }
-
-    private String buildAnalysisMessage(int stress) {
-        if (stress < 40) return getString(R.string.result_comfortable);
-        if (stress < 70) return getString(R.string.result_moderate);
-        if (stress > 0) return getString(R.string.result_tense);
-        return getString(R.string.result_default);
     }
 
     private static float[] resizeWave(float[] src, int outLen) {

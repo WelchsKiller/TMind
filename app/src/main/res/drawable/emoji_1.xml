@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+    <path
+        android:fillColor="#E53935"
+        android:pathData="M20,20m-18,0a18,18 0,1 1,36 0a18,18 0,1 1,-36 0" />
+    <!-- 화난 눈 > < -->
+    <path
+        android:fillColor="#5C1A1A"
+        android:pathData="M10,15 L15,17 L10,19 Z" />
+    <path
+        android:fillColor="#5C1A1A"
+        android:pathData="M30,15 L25,17 L30,19 Z" />
+    <!-- 찌푸린 입 -->
+    <path
+        android:fillColor="#5C1A1A"
+        android:pathData="M13,27 Q20,22 27,27 Q20,25 13,27 Z" />
+</vector>

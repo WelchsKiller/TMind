@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">TMind</string>
+    <string name="app_name">하루마음</string>
+
+    <string name="splash_tagline">오늘의 마음을\n천천히 정리해 보아요</string>
 
     <string name="login_title">로그인</string>
     <string name="login_hint">받으신 8자리 번호를 눌러주세요</string>
@@ -27,22 +29,13 @@
     <string name="star_hint">오전·오후 미션을 각각 완료하면 별이 채워지고, 추가 측정까지 하면 특별 별이 됩니다</string>
     <string name="additional_measure_title">추가 측정</string>
     <string name="additional_measure_sub">마음상태를 추가로 기록할 수 있어요.</string>
-    <string name="history_survey">이전 설문 응답 보기</string>
-    <string name="history_analysis">이전 분석 결과 보기</string>
-    <string name="history_survey_title">이전 설문 응답</string>
-    <string name="history_analysis_title">이전 분석 결과</string>
-    <string name="history_empty">아직 저장된 기록이 없습니다</string>
-    <string name="previous_analysis_section">이전 분석 결과</string>
-    <string name="previous_analysis_empty">이전에 저장된 분석 결과가 없습니다</string>
-    <string name="view_all_analysis">전체 보기</string>
-    <string name="view_all_responses">전체 응답 보기</string>
-    <string name="survey_detail_title">설문 응답 상세</string>
-    <string name="view_response">응답 보기</string>
-    <string name="survey_done_badge">%1$d개 문항 응답 완료</string>
-    <string name="survey_done_hint">%1$d개 문항에 응답했어요</string>
-    <string name="redo_hrv_message">심박변이도 측정을 이미 완료하였습니다.\n다시 측정 하시겠습니까?</string>
-    <string name="redo_ema_message">마음 상태 설문이 이미 완료 되었습니다.\n다시 설문 하시겠습니까?</string>
-    <string name="redo_diary_message">마음일기가 작성되어 있습니다.\n다시 작성 하시겠습니까?</string>
+    <string name="mission_already_done">이미 완료한 미션입니다</string>
+    <string name="confirm_exit_missions">미션을 완수하지 않으셨습니다. 종료하시겠습니까?</string>
+    <string name="weekly_trend_button">7일 정서 추이 보기</string>
+    <string name="weekly_trend_title">7일 정서 추이</string>
+    <string name="weekly_trend_subtitle">연구 기간 동안의 심박변이도 기반 정서 위치를 보여 줍니다</string>
+    <string name="weekly_trend_legend">점이 진할수록 최근 날짜입니다 · 가로=감정(부정적–긍정적), 세로=강도(약함–강함)</string>
+    <string name="weekly_trend_empty">아직 저장된 측정 기록이 없습니다</string>
     <string name="dialog_yes">예</string>
     <string name="dialog_no">아니요</string>
     <string name="dialog_end">종료</string>
@@ -81,6 +74,7 @@
     <string name="bpm_unit_format">%1$d 회/분</string>
     <string name="hrv_unit_format">%1$d ms</string>
     <string name="hrv_result_next">확인 후 다음으로</string>
+    <string name="hrv_test_quadrant">테스트 · 사분면 결과 보기</string>
     <string name="next">다음</string>
     <string name="prev">이전</string>
 
@@ -105,15 +99,67 @@
 
     <!-- Analysis -->
     <string name="analysis_title">분석 결과</string>
-    <string name="result_default">현재는 비교적 편안한 상태로 보여요</string>
-    <string name="result_comfortable">현재는 비교적 편안한 상태로 보여요</string>
-    <string name="result_moderate">현재는 약간 긴장된 상태로 보여요</string>
-    <string name="result_tense">현재는 다소 피로한 상태로 보여요</string>
+    <string name="result_quadrant_hint">심박변이도로 살펴본 현재 정서 위치입니다</string>
+    <string name="emotion_edit_title">현재 감정 수정하기</string>
+    <string name="emotion_edit_hint">클릭하여 위치를 수정해주세요.</string>
+    <string name="emotion_edit_confirm">수정하기</string>
+    <string name="emotion_edit_need_point">위치를 선택해 주세요</string>
     <string name="disclaimer">본 결과는 현재 상태를 살펴보기 위한 참고 정보이며, 의학적 진단을 대신하지 않습니다.</string>
-    <string name="feedback_question">실제로 이때 기분이 어떠셨나요?</string>
+    <string name="feedback_question">사분면에 표시된 위치가 실제 기분과 맞았나요?</string>
     <string name="feedback_yes">네, 맞아요</string>
     <string name="feedback_no">아니요, 달랐어요</string>
     <string name="feedback_unknown">잘 기억나지 않아요</string>
     <string name="mission_complete">오늘 미션 완료!</string>
     <string name="go_home">홈으로</string>
+
+    <!-- 맞춤 개입 -->
+    <string name="interv_title">맞춤 마음 돌보기</string>
+    <string name="interv_hint">분석 결과를 바탕으로 지금 도움이 될 활동을 골라 보세요. 꾸준히 하시면 더 좋아요 수 있어요.</string>
+    <string name="interv_feedback_hint">분석에 맞는 심호흡·명상·요가 활동을 이어가 보세요</string>
+    <string name="interv_open">맞춤 관리 시작하기</string>
+    <string name="interv_start">시작하기</string>
+    <string name="interv_open_failed">영상을 열 수 없습니다</string>
+    <string name="interv_vib_playing">이완 진동을 실행했습니다</string>
+    <string name="interv_type_stress">지금 상태에 맞춰 이완 활동을 추천해요</string>
+    <string name="interv_type_fatigue">휴식과 수면 준비에 도움이 되는 활동을 추천해요</string>
+    <string name="interv_type_hrv">회복력 관리에 도움이 되는 활동을 추천해요</string>
+    <string name="interv_type_activity">가벼운 움직임으로 몸을 깨워 볼까요?</string>
+    <string name="interv_type_ans">균형 잡힌 호흡·움직임 활동을 추천해요</string>
+    <string name="interv_type_balanced">오늘의 컨디션 유지를 위한 활동을 추천해요</string>
+    <string name="interv_breath_title">심호흡 훈련</string>
+    <string name="interv_breath_desc">짧은 호흡 가이드로 마음을 가라앉혀 보세요</string>
+    <string name="interv_meditation_title">명상 안내</string>
+    <string name="interv_meditation_desc">짧은 명상으로 몸과 마음을 편안하게</string>
+    <string name="interv_yoga_title">요가 안내</string>
+    <string name="interv_yoga_desc">초보자용 가벼운 요가 동작을 따라해 보세요</string>
+    <string name="interv_stress_video_title">스트레스 관리 영상</string>
+    <string name="interv_stress_video_desc">긴장을 풀어 주는 안내 영상을 시청해 보세요</string>
+    <string name="interv_music_title">이완 음악</string>
+    <string name="interv_music_desc">부드러운 음악과 함께 긴장을 풀어 보세요</string>
+    <string name="interv_vib_title">스마트폰 진동 이완</string>
+    <string name="interv_vib_desc">짧은 진동 패턴으로 이완을 돕습니다</string>
+    <string name="interv_soft_vib_title">부드러운 진동</string>
+    <string name="interv_soft_vib_desc">수면 준비에 맞는 부드러운 진동입니다</string>
+    <string name="interv_sleep_music_title">수면 유도 음악</string>
+    <string name="interv_sleep_music_desc">잠자리에 들기 전 듣기 좋은 음악입니다</string>
+    <string name="interv_stretch_title">스트레칭·운동 영상</string>
+    <string name="interv_stretch_desc">가벼운 스트레칭으로 몸을 풀어 보세요</string>
+    <string name="breath_guide">들숨 4초 · 멈춤 4초 · 날숨 4초를 4회 반복합니다</string>
+    <string name="breath_guide_progress">%1$d / %2$d 회 · 들숨 4초 · 멈춤 4초 · 날숨 4초</string>
+    <string name="breath_start">시작</string>
+    <string name="breath_stop">멈추기</string>
+    <string name="breath_inhale">들이쉬세요</string>
+    <string name="breath_hold">잠시 멈추세요</string>
+    <string name="breath_exhale">내쉬세요</string>
+    <string name="breath_done">잘하셨어요. 심호흡을 마쳤습니다</string>
+
+    <!-- History (연구 종료 추이 외 화면에서 필요 시) -->
+    <string name="history_survey_title">이전 설문 응답</string>
+    <string name="history_analysis_title">이전 분석 결과</string>
+    <string name="history_empty">아직 저장된 기록이 없습니다</string>
+    <string name="view_all_responses">전체 응답 보기</string>
+    <string name="survey_detail_title">설문 응답 상세</string>
+    <string name="view_response">응답 보기</string>
+    <string name="survey_done_badge">%1$d개 문항 응답 완료</string>
+    <string name="survey_done_hint">%1$d개 문항에 응답했어요</string>
 </resources>

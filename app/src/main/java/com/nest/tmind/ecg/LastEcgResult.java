@@ -3,6 +3,8 @@ package com.nest.tmind.ecg;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.nest.tmind.util.AesCrypto;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -63,7 +65,7 @@ public class LastEcgResult {
     // ────────────── SharedPreferences에서 마지막 결과 로드 ──────────────
     public static void loadFromPrefs(Context ctx) {
         SharedPreferences sp = ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        String js = sp.getString(KEY_LAST, null);
+        String js = readPref(sp, KEY_LAST);
         if (js == null) {
             lastSpike = null;
             lastFs = 0;
@@ -154,7 +156,7 @@ public class LastEcgResult {
 
         // history 읽어서 append
         JSONArray hist;
-        String jsHist = sp.getString(KEY_HISTORY, null);
+        String jsHist = readPref(sp, KEY_HISTORY);
         if (jsHist != null) {
             try {
                 hist = new JSONArray(jsHist);
@@ -177,9 +179,15 @@ public class LastEcgResult {
         }
 
         sp.edit()
-                .putString(KEY_LAST, last.toString())
-                .putString(KEY_HISTORY, hist.toString())
+                .putString(KEY_LAST, AesCrypto.encryptSafe(ctx, last.toString()))
+                .putString(KEY_HISTORY, AesCrypto.encryptSafe(ctx, hist.toString()))
                 .apply();
+    }
+
+    private static String readPref(SharedPreferences sp, String key) {
+        String v = sp.getString(key, null);
+        if (v == null) return null;
+        return AesCrypto.decryptOrPlain(v);
     }
 
     // ────────────── 특정 날짜(자정 기준) 히스토리 로드 ──────────────
@@ -187,7 +195,7 @@ public class LastEcgResult {
         List<DailyRecord> out = new ArrayList<>();
 
         SharedPreferences sp = ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        String jsHist = sp.getString(KEY_HISTORY, null);
+        String jsHist = readPref(sp, KEY_HISTORY);
         if (jsHist == null) return out;
 
         long dayStart, dayEnd;

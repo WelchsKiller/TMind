@@ -88,7 +88,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
         if (tts != null) tts.stop();
         // 녹음 중이 아니어도 일기 화면 이탈 확인
         new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setMessage(R.string.confirm_exit_diary)
+                .setMessage(R.string.confirm_exit_missions)
                 .setPositiveButton(R.string.dialog_end, (d, w) -> {
                     if (recording) {
                         try {

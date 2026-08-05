@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M20,20m-18,0a18,18 0,1 1,36 0a18,18 0,1 1,-36 0" />
+    <!-- 감은 눈 -->
+    <path
+        android:strokeColor="#1B5E20"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M11,16 Q14,13 17,16" />
+    <path
+        android:strokeColor="#1B5E20"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M23,16 Q26,13 29,16" />
+    <path
+        android:fillColor="#1B5E20"
+        android:pathData="M14,24 Q20,30 26,24 Q20,27.5 14,24 Z" />
+</vector>

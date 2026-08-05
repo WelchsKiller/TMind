@@ -45,4 +45,15 @@
     </FrameLayout>
 
     <TextView android:id="@+id/tvInstruction" style="@style/SeniorBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center" android:text="@string/hrv_instruction" android:textSize="18sp" />
+
+    <Button
+        android:id="@+id/btnTestQuadrant"
+        style="@style/SeniorButton"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_btn_outline"
+        android:text="@string/hrv_test_quadrant"
+        android:textColor="@color/teal_dark"
+        android:visibility="visible" />
 </LinearLayout>

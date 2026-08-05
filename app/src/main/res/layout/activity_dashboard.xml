@@ -144,25 +144,17 @@
             android:max="3"
             android:progressTint="@color/teal_primary" />
 
+        <!-- 7일 정서 추이 -->
         <Button
-            android:id="@+id/btnHistorySurvey"
+            android:id="@+id/btnWeeklyTrend"
             style="@style/SeniorButton"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="24dp"
-            android:background="@drawable/bg_btn_outline"
-            android:text="@string/history_survey"
-            android:textColor="@color/teal_dark" />
-
-        <Button
-            android:id="@+id/btnHistoryAnalysis"
-            style="@style/SeniorButton"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="10dp"
             android:layout_marginBottom="12dp"
-            android:background="@drawable/bg_btn_outline"
-            android:text="@string/history_analysis"
-            android:textColor="@color/teal_dark" />
+            android:background="@drawable/bg_btn_primary"
+            android:text="@string/weekly_trend_button"
+            android:textColor="@color/white"
+            android:visibility="visible" />
     </LinearLayout>
 </ScrollView>

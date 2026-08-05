@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <!-- 투명 배경: 원형 민트 + 해 + 하트 (흰 사각 없음) -->
+    <path
+        android:fillColor="#2F9E7A"
+        android:pathData="M60,60m-54,0a54,54 0,1 1,108 0a54,54 0,1 1,-108 0" />
+    <path
+        android:fillColor="#3DB892"
+        android:pathData="M60,60m-46,0a46,46 0,1 1,92 0a46,46 0,1 1,-92 0" />
+    <path
+        android:fillColor="#F5D98A"
+        android:pathData="M60,42m-16,0a16,16 0,1 1,32 0a16,16 0,1 1,-32 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M60,78c-1.4,-1.3 -12.2,-11 -16.8,-16.4C38.8,56.6 36.5,52.6 36.5,48.5c0,-5.1 4,-9.1 9,-9.1c2.8,0 5.4,1.3 7.1,3.4c1.7,-2.1 4.3,-3.4 7.1,-3.4c5,0 9,4 9,9.1c0,4.1 -2.3,8.1 -6.7,13.1C72.2,67 61.4,76.7 60,78z" />
+</vector>

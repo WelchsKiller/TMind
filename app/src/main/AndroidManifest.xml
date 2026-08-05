@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -33,14 +34,19 @@
         android:theme="@style/Theme.TMind">
 
         <activity
-            android:name=".ui.LoginActivity"
+            android:name=".ui.SplashActivity"
             android:exported="true"
-            android:windowSoftInputMode="stateAlwaysHidden">
+            android:theme="@style/Theme.TMind">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.LoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateAlwaysHidden" />
 
         <activity android:name=".ui.DashboardActivity" android:launchMode="singleTop" />
         <activity android:name=".ui.HrvGuideActivity" />
@@ -52,7 +58,12 @@
         <activity android:name=".ui.SurveyDetailActivity" />
         <activity android:name=".ui.VoiceDiaryActivity" />
         <activity android:name=".ui.AnalysisResultActivity" />
+        <activity android:name=".ui.EmotionEditActivity"
+            android:theme="@style/Theme.TMind" />
+        <activity android:name=".ui.WeeklyTrendActivity" />
         <activity android:name=".ui.FeedbackActivity" />
+        <activity android:name=".ui.InterventionActivity" />
+        <activity android:name=".ui.BreathingGuideActivity" />
 
         <service
             android:name=".ecg.EcgBleService"

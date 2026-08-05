@@ -1,20 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF1A1A1A</color>
+    <color name="black">#FF1F2A26</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="teal_primary">#006666</color>
-    <color name="teal_dark">#004D4D</color>
-    <color name="teal_light">#E8F5F3</color>
-    <color name="text_primary">#1A1A1A</color>
-    <color name="bg_senior">#F7FAFC</color>
-    <color name="text_secondary">#4A5568</color>
-    <color name="card_inactive">#EEEEEE</color>
+    <!-- 선명한 민트 (시니어 가독성) -->
+    <color name="teal_primary">#2F9E7A</color>
+    <color name="teal_dark">#1F7A5C</color>
+    <color name="teal_light">#D8F0E6</color>
+    <color name="teal_pastel">#6EC4A5</color>
+    <color name="text_primary">#1F2A26</color>
+    <color name="bg_senior">#F2F7F4</color>
+    <color name="text_secondary">#3D524A</color>
+    <color name="card_inactive">#DCE6E1</color>
     <color name="green_accent">#2F9E7A</color>
-    <color name="coral_accent">#E07A5F</color>
-    <color name="amber_accent">#E9A825</color>
-    <color name="sky_accent">#3D8BDB</color>
-    <color name="red_record">#E53935</color>
-    <color name="border_gray">#C5CDD6</color>
-    <color name="result_green_bg">#E8F5E9</color>
-    <color name="btn_secondary_bg">#1F4E5F</color>
+    <color name="coral_accent">#E8917A</color>
+    <color name="amber_accent">#E0B84A</color>
+    <color name="sky_accent">#5BA3D0</color>
+    <color name="red_record">#E05555</color>
+    <color name="border_gray">#9BB0A6</color>
+    <color name="result_green_bg">#D8F0E6</color>
+    <color name="btn_secondary_bg">#3D8B74</color>
+    <!-- 메인 미션 카드: 파스텔이되 또렷하게 -->
+    <color name="mission_hrv_start">#4DB896</color>
+    <color name="mission_hrv_end">#2F9E7A</color>
+    <color name="mission_ema_start">#E8917A</color>
+    <color name="mission_ema_end">#D97860</color>
+    <color name="mission_diary_start">#5BA3D0</color>
+    <color name="mission_diary_end">#3D8BB8</color>
+    <color name="splash_bg_start">#E0F5EC</color>
+    <color name="splash_bg_end">#C5EBD9</color>
 </resources>

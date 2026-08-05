@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -20,10 +21,13 @@ import com.nest.tmind.R;
 import com.nest.tmind.ecg.EcgBleService;
 import com.nest.tmind.ecg.EcgResultAnalyzer;
 import com.nest.tmind.ecg.EcgSurfaceView;
+import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ecg.pref.AppVerifyStorage;
 import com.nest.tmind.ecg.MetricsManager;
 import com.nest.tmind.ecg.model.AppVerifyResult;
 import com.nest.tmind.view.CircularProgressView;
+
+import java.util.Random;
 
 /** APP-USR-010: BLE 연결 후 5분 HRV 측정 */
 public class HrvMeasureActivity extends BaseSeniorActivity
@@ -112,10 +116,14 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         ecgView.setFilters(false, false);
         ecgView.setDrawGrid(true);
         ecgView.setDrawAxisLabels(false);
-        ecgView.setWaveColor(Color.parseColor("#006666"));
+        ecgView.setWaveColor(ContextCompat.getColor(this, R.color.teal_primary));
 
         findViewById(R.id.btnBack).setOnClickListener(v -> confirmExitMeasure());
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvInstruction);
+
+        Button btnTest = findViewById(R.id.btnTestQuadrant);
+        btnTest.setBackgroundTintList(null);
+        btnTest.setOnClickListener(v -> runTestQuadrant());
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -126,6 +134,41 @@ public class HrvMeasureActivity extends BaseSeniorActivity
 
         showWaitingForConnectionUi();
         resetMeasurementState();
+    }
+
+    /** BLE 없이 임의 HR/HRV로 사분면 결과 화면 확인 */
+    private void runTestQuadrant() {
+        stopWaitBleReady();
+        if (countdownRunnable != null) {
+            handler.removeCallbacks(countdownRunnable);
+            countdownRunnable = null;
+        }
+        stopBleCompletely();
+
+        Random rnd = new Random();
+        int hr = 55 + rnd.nextInt(66);       // 55~120
+        int hrvMs = 25 + rnd.nextInt(126);   // 25~150
+        int hrvForScore = Math.max(20, Math.min(160, hrvMs));
+        int stress = Math.round(((160f - hrvForScore) / 140f) * 100f);
+        int rrMs = Math.round(60000f / Math.max(1, hr));
+        long now = System.currentTimeMillis();
+
+        // 간단한 가짜 스파이크 파형
+        float[] spike = new float[200];
+        for (int i = 0; i < spike.length; i++) {
+            float t = i / (float) spike.length;
+            spike[i] = (float) (Math.sin(t * Math.PI * 2) * 0.3
+                    + (t > 0.4 && t < 0.5 ? Math.sin((t - 0.4) / 0.1 * Math.PI) * 0.8 : 0));
+        }
+
+        LastEcgResult.updateAndSave(this, spike, 250, hr, hrvMs, rrMs, stress, now);
+
+        Toast.makeText(this,
+                "테스트 HR " + hr + " · HRV " + hrvMs + " ms · stress " + stress,
+                Toast.LENGTH_SHORT).show();
+
+        startActivity(new Intent(this, AnalysisResultActivity.class));
+        finish();
     }
 
     private void resetMeasurementState() {
@@ -213,7 +256,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
     private void confirmExitMeasure() {
         if (tts != null) tts.stop();
         new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setMessage(R.string.confirm_exit_measure)
+                .setMessage(R.string.confirm_exit_missions)
                 .setPositiveButton(R.string.dialog_end, (d, w) -> exitMeasureScreen())
                 .setNegativeButton(R.string.dialog_cancel, null)
                 .show();

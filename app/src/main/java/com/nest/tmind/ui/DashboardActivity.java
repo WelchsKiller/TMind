@@ -7,7 +7,9 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 
@@ -26,6 +28,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     private TextView tvGreeting, tvProgress;
     private LinearLayout starRow;
     private ProgressBar progressBar;
+    private View btnWeeklyTrend;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,7 +41,6 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
         setContentView(R.layout.activity_dashboard);
         mission = new MissionManager(this);
-        // 대시보드 복귀 시 추가측정 모드 해제 → 현재 시각 세션
         mission.setAdditionalMeasureMode(false);
 
         tvGreeting = findViewById(R.id.tvGreeting);
@@ -48,6 +50,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardDiary = findViewById(R.id.cardDiary);
         progressBar = findViewById(R.id.progressBar);
         starRow = findViewById(R.id.starRow);
+        btnWeeklyTrend = findViewById(R.id.btnWeeklyTrend);
 
         setupMissionCard(cardHrv, R.drawable.ic_heart, R.string.mission_hrv, R.string.mission_hrv_sub);
         setupMissionCard(cardEma, R.drawable.ic_survey, R.string.mission_ema, R.string.mission_ema_sub);
@@ -56,17 +59,19 @@ public class DashboardActivity extends BaseSeniorActivity {
         tvGreeting.setText(getString(R.string.dashboard_greeting, session.getUserName()));
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvGreeting, R.id.tvProgress);
 
-        cardHrv.setOnClickListener(v -> onHrvClick(false));
-        cardEma.setOnClickListener(v -> onEmaClick(false));
-        cardDiary.setOnClickListener(v -> onDiaryClick(false));
+        cardHrv.setOnClickListener(v -> onHrvClick());
+        cardEma.setOnClickListener(v -> onEmaClick());
+        cardDiary.setOnClickListener(v -> onDiaryClick());
         findViewById(R.id.cardAdditional).setOnClickListener(v -> openAdditional());
+        btnWeeklyTrend.setOnClickListener(v ->
+                startActivity(new Intent(this, WeeklyTrendActivity.class)));
 
-        findViewById(R.id.btnHistorySurvey).setOnClickListener(v ->
-                startActivity(new Intent(this, HistoryListActivity.class)
-                        .putExtra(HistoryListActivity.EXTRA_MODE, HistoryListActivity.MODE_SURVEY)));
-        findViewById(R.id.btnHistoryAnalysis).setOnClickListener(v ->
-                startActivity(new Intent(this, HistoryListActivity.class)
-                        .putExtra(HistoryListActivity.EXTRA_MODE, HistoryListActivity.MODE_ANALYSIS)));
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                confirmExitIfMissionsIncomplete();
+            }
+        });
 
         session.saveScreen("dashboard");
         refreshUi();
@@ -80,9 +85,20 @@ public class DashboardActivity extends BaseSeniorActivity {
         refreshUi();
     }
 
+    private void confirmExitIfMissionsIncomplete() {
+        if (mission.isAllDone() || session.isStudyEnded()) {
+            finishAffinity();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setMessage(R.string.confirm_exit_missions)
+                .setPositiveButton(R.string.dialog_end, (d, w) -> finishAffinity())
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .show();
+    }
+
     private void openAdditional() {
         mission.setAdditionalMeasureMode(true);
-        // 추가 측정: 미완료 미션부터 안내 (HRV 가이드)
         if (!mission.isHrvDone()) {
             openHrv();
         } else if (!mission.isEmaDone()) {
@@ -90,47 +106,35 @@ public class DashboardActivity extends BaseSeniorActivity {
         } else if (!mission.isDiaryDone()) {
             openDiary();
         } else {
-            showRedoDialog(R.string.redo_hrv_message, () -> {
-                mission.clearHrv();
-                mission.clearEma();
-                mission.clearDiary();
-                openHrv();
-            });
+            mission.clearHrv();
+            mission.clearEma();
+            mission.clearDiary();
+            openHrv();
         }
     }
 
-    private void onHrvClick(boolean extra) {
-        if (!extra) mission.setAdditionalMeasureMode(false);
+    private void onHrvClick() {
+        mission.setAdditionalMeasureMode(false);
         if (mission.isHrvDone()) {
-            showRedoDialog(R.string.redo_hrv_message, () -> {
-                mission.clearHrv();
-                openHrv();
-            });
+            Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
         } else {
             openHrv();
         }
     }
 
-    private void onEmaClick(boolean extra) {
-        if (!extra) mission.setAdditionalMeasureMode(false);
+    private void onEmaClick() {
+        mission.setAdditionalMeasureMode(false);
         if (mission.isEmaDone()) {
-            showRedoDialog(R.string.redo_ema_message, () -> {
-                mission.clearEma();
-                session.saveEmaProgress(0, new int[16]);
-                openEma();
-            });
+            Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
         } else {
             openEma();
         }
     }
 
-    private void onDiaryClick(boolean extra) {
-        if (!extra) mission.setAdditionalMeasureMode(false);
+    private void onDiaryClick() {
+        mission.setAdditionalMeasureMode(false);
         if (mission.isDiaryDone()) {
-            showRedoDialog(R.string.redo_diary_message, () -> {
-                mission.clearDiary();
-                openDiary();
-            });
+            Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
         } else {
             openDiary();
         }
@@ -161,14 +165,6 @@ public class DashboardActivity extends BaseSeniorActivity {
         startActivity(new Intent(this, VoiceDiaryActivity.class));
     }
 
-    private void showRedoDialog(int messageRes, Runnable onYes) {
-        new AlertDialog.Builder(this)
-                .setMessage(messageRes)
-                .setPositiveButton(R.string.dialog_yes, (d, w) -> onYes.run())
-                .setNegativeButton(R.string.dialog_no, null)
-                .show();
-    }
-
     private void refreshUi() {
         MissionManager.Session active = mission.getActiveSession();
         int done = mission.getCompletedCount(active);
@@ -186,6 +182,8 @@ public class DashboardActivity extends BaseSeniorActivity {
                 ? R.string.mission_diary_sub
                 : R.string.mission_diary_active);
 
+        btnWeeklyTrend.setVisibility(View.VISIBLE);
+
         renderStars();
     }
 
@@ -202,7 +200,6 @@ public class DashboardActivity extends BaseSeniorActivity {
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
             iv.setAdjustViewBounds(true);
             int state = mission.getStarState(i);
-            // star_1=반, star_2=특수(반짝), star_3=가득, star_4=빈
             if (state >= MissionManager.STAR_BONUS) {
                 iv.setImageResource(R.drawable.star_2);
             } else if (state >= MissionManager.STAR_FULL) {
@@ -217,7 +214,9 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void setupMissionCard(View card, int iconRes, int titleRes, int subRes) {
-        ((ImageView) card.findViewById(R.id.ivIcon)).setImageResource(iconRes);
+        ImageView icon = card.findViewById(R.id.ivIcon);
+        icon.setImageResource(iconRes);
+        icon.clearColorFilter();
         ((TextView) card.findViewById(R.id.tvMissionTitle)).setText(titleRes);
         ((TextView) card.findViewById(R.id.tvMissionSub)).setText(subRes);
     }
@@ -227,6 +226,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         TextView sub = card.findViewById(R.id.tvMissionSub);
         View check = card.findViewById(R.id.checkDone);
         ImageView arrow = card.findViewById(R.id.ivArrow);
+        ImageView icon = card.findViewById(R.id.ivIcon);
 
         card.setClickable(true);
         card.setFocusable(true);
@@ -237,13 +237,19 @@ public class DashboardActivity extends BaseSeniorActivity {
             card.setBackgroundResource(R.drawable.bg_mission_card_completed);
             title.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
             sub.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+            // 완료 카드(밝은 배경) → 진한 녹색 아이콘
+            icon.setColorFilter(ContextCompat.getColor(this, R.color.teal_dark),
+                    android.graphics.PorterDuff.Mode.SRC_IN);
             check.setVisibility(View.VISIBLE);
             arrow.setVisibility(View.GONE);
         } else {
             card.setBackgroundResource(activeBg);
             title.setTextColor(ContextCompat.getColor(this, R.color.white));
             sub.setTextColor(ContextCompat.getColor(this, R.color.white));
-            sub.setAlpha(0.92f);
+            sub.setAlpha(1f);
+            // 활성 카드 → 흰색 아이콘 (배경색과 선명하게 대비)
+            icon.setColorFilter(ContextCompat.getColor(this, R.color.white),
+                    android.graphics.PorterDuff.Mode.SRC_IN);
             check.setVisibility(View.GONE);
             arrow.setVisibility(View.VISIBLE);
             arrow.setImageResource(R.drawable.ic_chevron_white);

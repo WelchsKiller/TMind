@@ -1,12 +1,17 @@
 package com.nest.tmind.ecg;
 
 import android.content.Context;
+import android.util.Log;
+
+import com.nest.tmind.util.ResourceManager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 
-/** Smart_EKG MeasureResultActivity 분석 로직 이식 */
+/** Smart_EKG MeasureResultActivity 분석 로직 이식 (+ 리소스 적응형 연산) */
 public final class EcgResultAnalyzer {
+
+    private static final String TAG = "EcgResultAnalyzer";
 
     public static class Result {
         public float[] spike;
@@ -17,6 +22,7 @@ public final class EcgResultAnalyzer {
         public int stressScore;
         public long measuredAt;
         public boolean valid;
+        public String resourceLevel;
     }
 
     public static Result analyze(Context ctx) {
@@ -25,33 +31,45 @@ public final class EcgResultAnalyzer {
         r.fs = EcgCapture.i().fs();
         if (r.fs <= 0) r.fs = 250;
 
+        ResourceManager.Level level = ResourceManager.getLevel(ctx);
+        r.resourceLevel = level.name();
+        int stride = ResourceManager.sampleStride(level);
+        boolean heavy = ResourceManager.useHeavyFilters(level);
+        int spikeLen = ResourceManager.spikeLength(level);
+        Log.i(TAG, "analyze resource=" + level.name()
+                + " battery=" + ResourceManager.batteryPercent(ctx)
+                + " stride=" + stride);
+
         float[] raw = EcgCapture.i().consumeAll();
         boolean fromWave = false;
 
         if (raw != null && raw.length >= Math.max(r.fs, 400)) {
+            // 배터리·발열에 따라 샘플 다운샘플
+            float[] sampled = downsample(raw, stride);
             Biquad hp = Biquad.highpass(r.fs, 0.67, 0.707);
-            Biquad notch = Biquad.notch(r.fs, 60.0, 30.0);
+            Biquad notch = heavy ? Biquad.notch(r.fs, 60.0, 30.0) : null;
             Biquad lp = Biquad.lowpass(r.fs, 18.0, 0.707);
 
-            double[] x = new double[raw.length];
-            for (int i = 0; i < raw.length; i++) {
-                double v = raw[i];
+            double[] x = new double[sampled.length];
+            for (int i = 0; i < sampled.length; i++) {
+                double v = sampled[i];
                 v = hp.process(v);
-                v = notch.process(v);
+                if (notch != null) v = notch.process(v);
                 v = lp.process(v);
                 x[i] = v;
             }
 
-            ArrayList<Integer> rloc = detectRPeaks(x, r.fs);
+            // 다운샘플 시 피크 검출용 유효 fs 보정
+            int fsEff = Math.max(1, r.fs / stride);
+            ArrayList<Integer> rloc = detectRPeaks(x, fsEff);
             if (rloc != null && rloc.size() >= 2) {
-                float[] avgBeat = averageBeat(x, r.fs, 0.20, 0.40, 200, rloc);
+                float[] avgBeat = averageBeat(x, fsEff, 0.20, 0.40, 200, rloc);
                 if (avgBeat != null) {
-                    avgBeat = smooth(avgBeat, 3);
-                    r.rrMs = computeAvgRrMs(rloc, r.fs);
+                    avgBeat = smooth(avgBeat, level == ResourceManager.Level.LOW ? 1 : 3);
+                    r.rrMs = computeAvgRrMs(rloc, fsEff);
                     r.hrBpm = (r.rrMs > 0) ? Math.round(60000f / r.rrMs) : 0;
-                    r.hrvMs = computeHrvMs(rloc, r.fs);
-                    final int STORED_LEN = 400;
-                    r.spike = makeIconSpikeFrom(avgBeat, STORED_LEN);
+                    r.hrvMs = computeHrvMs(rloc, fsEff);
+                    r.spike = makeIconSpikeFrom(avgBeat, spikeLen);
                     fromWave = true;
                 }
             }
@@ -93,6 +111,16 @@ public final class EcgResultAnalyzer {
         LastEcgResult.updateAndSave(ctx, r.spike, r.fs, r.hrBpm, r.hrvMs, r.rrMs,
                 r.stressScore, r.measuredAt);
         return r;
+    }
+
+    private static float[] downsample(float[] raw, int stride) {
+        if (raw == null || stride <= 1) return raw;
+        int n = (raw.length + stride - 1) / stride;
+        float[] out = new float[n];
+        for (int i = 0, j = 0; i < raw.length; i += stride, j++) {
+            out[j] = raw[i];
+        }
+        return out;
     }
 
     private static float[] makeIconSpikeFrom(float[] avgBeat, int totalLenPx) {

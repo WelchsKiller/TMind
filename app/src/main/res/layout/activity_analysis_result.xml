@@ -48,24 +48,21 @@
         </LinearLayout>
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="12dp"
-            android:text="😊"
-            android:textSize="42sp" />
-
-        <TextView
-            android:id="@+id/tvResult"
+            android:id="@+id/tvResultHint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="12dp"
             android:gravity="center"
-            android:lineSpacingExtra="4dp"
-            android:text="@string/result_default"
-            android:textColor="@color/black"
-            android:textSize="24sp"
-            android:textStyle="bold" />
+            android:text="@string/result_quadrant_hint"
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp" />
+
+        <com.nest.tmind.view.RussellCircumplexView
+            android:id="@+id/russellView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="8dp" />
 
         <TextView
             android:id="@+id/tvDisclaimer"
@@ -165,43 +162,6 @@
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvPrevSection"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/previous_analysis_section"
-            android:textColor="@color/black"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <LinearLayout
-            android:id="@+id/prevList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="vertical" />
-
-        <TextView
-            android:id="@+id/tvPrevEmpty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/previous_analysis_empty"
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/btnViewAllAnalysis"
-            style="@style/SeniorButton"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_btn_outline"
-            android:text="@string/view_all_analysis"
-            android:textColor="@color/teal_dark" />
 
         <TextView
             android:id="@+id/tvFeedbackQuestion"

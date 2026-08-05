@@ -31,8 +31,8 @@ public final class ReminderScheduler {
 
     public static void scheduleDaily(Context context) {
         try {
-            scheduleAt(context, 9, 0, NOTI_MORNING, "morning");
-            scheduleAt(context, 15, 0, NOTI_AFTERNOON, "afternoon");
+            scheduleAt(context, 8, 0, NOTI_MORNING, "morning");
+            scheduleAt(context, 20, 0, NOTI_AFTERNOON, "evening");
         } catch (Exception e) {
             Log.w(TAG, "scheduleDaily failed", e);
         }
@@ -84,16 +84,17 @@ public final class ReminderScheduler {
         @Override
         public void onReceive(Context context, Intent intent) {
             String slot = intent != null ? intent.getStringExtra("slot") : "morning";
-            String title = "TMind 미션 안내";
-            String body = "afternoon".equals(slot)
-                    ? "오후 미션 시간이에요. 오늘 할 일을 확인해 주세요."
-                    : "오전 미션 시간이에요. 오늘 할 일을 시작해 볼까요?";
+            String title = "하루마음 미션 안내";
+            boolean evening = "evening".equals(slot) || "afternoon".equals(slot);
+            String body = evening
+                    ? "저녁 미션 시간이에요. 오늘 할 일을 확인해 주세요."
+                    : "아침 미션 시간이에요. 오늘 할 일을 시작해 볼까요?";
 
             Intent open = new Intent(context, DashboardActivity.class);
             open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             PendingIntent pi = PendingIntent.getActivity(
                     context,
-                    "afternoon".equals(slot) ? NOTI_AFTERNOON : NOTI_MORNING,
+                    evening ? NOTI_AFTERNOON : NOTI_MORNING,
                     open,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
             );
@@ -111,7 +112,7 @@ public final class ReminderScheduler {
                         == android.content.pm.PackageManager.PERMISSION_GRANTED
                         || Build.VERSION.SDK_INT < 33) {
                     NotificationManagerCompat.from(context).notify(
-                            "afternoon".equals(slot) ? NOTI_AFTERNOON : NOTI_MORNING,
+                            evening ? NOTI_AFTERNOON : NOTI_MORNING,
                             builder.build()
                     );
                 }

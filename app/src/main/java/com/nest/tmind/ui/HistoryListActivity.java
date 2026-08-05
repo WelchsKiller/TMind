@@ -245,9 +245,13 @@ public class HistoryListActivity extends BaseSeniorActivity {
         long ts = row.optLong("ts", 0);
         int bpm = row.optInt("bpm", 0);
         int hrv = row.optInt("hrvMs", 0);
-        return fmt.format(new Date(ts)) + "\n"
-                + row.optString("message", "") + "\n"
-                + "심박수 " + (bpm > 0 ? bpm + "회/분" : "--")
-                + " · 심박변이도 " + (hrv > 0 ? hrv + " ms" : "--");
+        StringBuilder sb = new StringBuilder();
+        sb.append(fmt.format(new Date(ts))).append('\n');
+        if (row.has("valence") && row.has("arousal")) {
+            sb.append("정서 위치 기록됨").append('\n');
+        }
+        sb.append("심박수 ").append(bpm > 0 ? bpm + "회/분" : "--")
+                .append(" · 심박변이도 ").append(hrv > 0 ? hrv + " ms" : "--");
+        return sb.toString();
     }
 }

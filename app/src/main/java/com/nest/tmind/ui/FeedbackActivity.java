@@ -2,8 +2,8 @@ package com.nest.tmind.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.nest.tmind.R;
 import com.nest.tmind.util.DataQueueManager;
@@ -11,7 +11,7 @@ import com.nest.tmind.util.MissionManager;
 
 import org.json.JSONObject;
 
-/** APP-USR-007: 예측 피드백 (동의/불일치/기억안남) */
+/** APP-USR-007: 예측 피드백 후 맞춤 개입 유도 */
 public class FeedbackActivity extends BaseSeniorActivity {
 
     public static final String EXTRA_CHOICE = "choice";
@@ -39,7 +39,16 @@ public class FeedbackActivity extends BaseSeniorActivity {
 
         setupTtsButton(R.id.btnTts, tvDone.getText().toString());
 
-        findViewById(R.id.btnHome).setOnClickListener(v -> {
+        Button btnIntervention = findViewById(R.id.btnIntervention);
+        btnIntervention.setBackgroundTintList(null);
+        btnIntervention.setOnClickListener(v -> {
+            startActivity(new Intent(this, InterventionActivity.class));
+            finish();
+        });
+
+        Button btnHome = findViewById(R.id.btnHome);
+        btnHome.setBackgroundTintList(null);
+        btnHome.setOnClickListener(v -> {
             Intent i = new Intent(this, DashboardActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
             startActivity(i);

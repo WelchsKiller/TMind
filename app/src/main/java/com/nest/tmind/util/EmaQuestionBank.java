@@ -94,23 +94,17 @@ public final class EmaQuestionBank {
     }
 
     public static String[] emojisFor(Item item) {
-        if (!item.emotionScale) return EMOJIS_INTENSITY;
-        return item.negativeValence
-                ? new String[]{"😢", "🙁", "😐", "🙂", "😊"}
-                : EMOJIS_AGREE;
+        // 문항과 무관하게 항상 동일 순서 (부정/강함 → 긍정/없음)
+        return EMOJIS_INTENSITY;
     }
 
     /**
      * 화면 위→아래 displayIndex 0~4 에 대응하는 drawable.
-     * emoji_1=빨강(부정) … emoji_5=초록(긍정)
+     * 항상 emoji_1(빨강) … emoji_5(초록) 고정 — 문항마다 바뀌지 않음.
      */
     public static int drawableResFor(Item item, int displayIndex) {
         if (displayIndex < 0 || displayIndex > 4) return R.drawable.emoji_3;
-        // bad→good 순서면 index 0 = emoji_1, 4 = emoji_5
-        // good→bad 순서(긍정 정서)면 반대로
-        boolean badToGood = !item.emotionScale || item.negativeValence;
-        int emojiNum = badToGood ? (displayIndex + 1) : (5 - displayIndex);
-        switch (emojiNum) {
+        switch (displayIndex + 1) {
             case 1: return R.drawable.emoji_1;
             case 2: return R.drawable.emoji_2;
             case 3: return R.drawable.emoji_3;
@@ -122,9 +116,7 @@ public final class EmaQuestionBank {
     /** displayIndex 0~4 에 대한 구분 색상 (ARGB) — 레거시/텍스트용 */
     public static int colorFor(Item item, int displayIndex) {
         if (displayIndex < 0 || displayIndex > 4) return 0xFF757575;
-        if (!item.emotionScale) return COLORS_BAD_TO_GOOD[displayIndex];
-        int[] palette = item.negativeValence ? COLORS_BAD_TO_GOOD : COLORS_GOOD_TO_BAD;
-        return palette[displayIndex];
+        return COLORS_BAD_TO_GOOD[displayIndex];
     }
 
     private static Item[] baseline() {

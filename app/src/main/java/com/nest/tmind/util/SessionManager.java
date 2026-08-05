@@ -15,6 +15,9 @@ public class SessionManager {
     private static final String KEY_EMA_ANSWERS = "ema_answers";
     private static final String KEY_USER_NAME = "user_name";
     private static final String KEY_LOGGED_IN = "logged_in";
+    private static final String KEY_STUDY_START = "study_start_ms";
+    /** 연구 참여 일수 (종료 후 7일 추이 제공) */
+    public static final int STUDY_DAYS = 7;
 
     private final SharedPreferences sp;
 
@@ -23,7 +26,44 @@ public class SessionManager {
     }
 
     public void setLoggedIn(String userName) {
-        sp.edit().putBoolean(KEY_LOGGED_IN, true).putString(KEY_USER_NAME, userName).apply();
+        SharedPreferences.Editor ed = sp.edit()
+                .putBoolean(KEY_LOGGED_IN, true)
+                .putString(KEY_USER_NAME, userName);
+        if (sp.getLong(KEY_STUDY_START, 0L) <= 0L) {
+            ed.putLong(KEY_STUDY_START, System.currentTimeMillis());
+        }
+        ed.apply();
+    }
+
+    public long getStudyStartMs() {
+        long start = sp.getLong(KEY_STUDY_START, 0L);
+        if (start <= 0L && isLoggedIn()) {
+            start = System.currentTimeMillis();
+            sp.edit().putLong(KEY_STUDY_START, start).apply();
+        }
+        return start;
+    }
+
+    /** 연구 시작일 기준 경과 일수 (0=첫날) */
+    public int getStudyDayIndex() {
+        long start = getStudyStartMs();
+        if (start <= 0) return 0;
+        long dayMs = 24L * 60L * 60L * 1000L;
+        return (int) ((startOfDay(System.currentTimeMillis()) - startOfDay(start)) / dayMs);
+    }
+
+    public boolean isStudyEnded() {
+        return getStudyDayIndex() >= STUDY_DAYS;
+    }
+
+    private static long startOfDay(long ms) {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.setTimeInMillis(ms);
+        c.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        c.set(java.util.Calendar.MINUTE, 0);
+        c.set(java.util.Calendar.SECOND, 0);
+        c.set(java.util.Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
     }
 
     public boolean isLoggedIn() {

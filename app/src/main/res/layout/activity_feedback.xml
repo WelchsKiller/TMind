@@ -7,9 +7,49 @@
     android:orientation="vertical"
     android:padding="20dp">
 
-    <ImageButton android:id="@+id/btnTts" android:layout_width="56dp" android:layout_height="56dp" android:layout_gravity="end" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_speaker" />
+    <ImageButton
+        android:id="@+id/btnTts"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="end"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@drawable/ic_speaker" />
 
-    <TextView android:id="@+id/tvDone" style="@style/SeniorTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="@string/mission_complete" android:textSize="28sp" />
+    <TextView
+        android:id="@+id/tvDone"
+        style="@style/SeniorTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="@string/mission_complete"
+        android:textSize="28sp" />
 
-    <Button android:id="@+id/btnHome" style="@style/SeniorButton" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginTop="48dp" android:background="@drawable/bg_btn_primary" android:text="@string/go_home" android:textColor="@color/white" />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:text="@string/interv_feedback_hint"
+        android:textColor="@color/text_secondary"
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/btnIntervention"
+        style="@style/SeniorButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="32dp"
+        android:background="@drawable/bg_btn_primary"
+        android:text="@string/interv_open"
+        android:textColor="@color/white" />
+
+    <Button
+        android:id="@+id/btnHome"
+        style="@style/SeniorButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_btn_outline"
+        android:text="@string/go_home"
+        android:textColor="@color/teal_dark" />
 </LinearLayout>
