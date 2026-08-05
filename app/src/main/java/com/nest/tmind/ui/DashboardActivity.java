@@ -182,7 +182,7 @@ public class DashboardActivity extends BaseSeniorActivity {
                 ? R.string.mission_diary_sub
                 : R.string.mission_diary_active);
 
-        btnWeeklyTrend.setVisibility(View.VISIBLE);
+        btnWeeklyTrend.setVisibility(session.isStudyEnded() ? View.VISIBLE : View.GONE);
 
         renderStars();
     }

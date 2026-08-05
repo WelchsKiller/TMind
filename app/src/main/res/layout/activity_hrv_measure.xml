@@ -55,5 +55,5 @@
         android:background="@drawable/bg_btn_outline"
         android:text="@string/hrv_test_quadrant"
         android:textColor="@color/teal_dark"
-        android:visibility="visible" />
+        android:visibility="gone" />
 </LinearLayout>
