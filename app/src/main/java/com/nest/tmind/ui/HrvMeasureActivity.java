@@ -168,7 +168,8 @@ public class HrvMeasureActivity extends BaseSeniorActivity
                 "테스트 HR " + hr + " · HRV " + hrvMs + " ms · stress " + stress,
                 Toast.LENGTH_SHORT).show();
 
-        startActivity(new Intent(this, AnalysisResultActivity.class));
+        // 테스트도 측정 결과 화면으로 (분석은 3미션 완료 후)
+        startActivity(new Intent(this, HrvResultActivity.class));
         finish();
     }
 

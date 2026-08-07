@@ -10,7 +10,8 @@ import java.util.Locale;
 
 /**
  * 오늘 미션: 오전/오후는 시각으로 자동 결정, 추가는 EVENT 세션.
- * 주간 별: 오전 0.5 + 오후 0.5 = 가득, 추가측정까지 하면 특수(금) 별.
+ * 별: 연구 일차(왼쪽부터 순차). 오전 반개 + 오후 반개 = 가득.
+ * 추가 측정 1회 이상 완료 시 특수(금) 별. 추가 측정은 하루 최대 5회.
  */
 public class MissionManager {
 
@@ -24,15 +25,18 @@ public class MissionManager {
     public static final int STAR_FULL = 2;
     public static final int STAR_BONUS = 3;
 
+    public static final int MAX_ADDITIONAL_PER_DAY = 5;
+
     private static final String PREF = "tmind_mission_v2";
 
     private final SharedPreferences sp;
     private final String todayKey;
+    private final Context appCtx;
 
     public MissionManager(Context ctx) {
+        appCtx = ctx.getApplicationContext();
         sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
         todayKey = new SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(new Date());
-        // 항상 현재 시각 기준 메인 세션으로 동기화 (수동 탭 선택 금지)
         syncMainSessionByHour();
     }
 
@@ -49,7 +53,6 @@ public class MissionManager {
 
     public void syncMainSessionByHour() {
         Session main = mainSessionByHour();
-        // 추가 측정 중이 아니면 메인 세션으로 고정
         String forced = sp.getString(todayKey + "_force_event", null);
         if ("1".equals(forced)) {
             sp.edit().putString(todayKey + "_active_session", Session.EVENT.name()).apply();
@@ -60,7 +63,6 @@ public class MissionManager {
 
     /** 추가 측정 모드 진입/해제 */
     public void setAdditionalMeasureMode(boolean on) {
-        // commit: 직후 isHrvDone() 등이 EVENT 세션을 보도록 동기 반영
         sp.edit().putString(todayKey + "_force_event", on ? "1" : null)
                 .putString(todayKey + "_active_session",
                         on ? Session.EVENT.name() : mainSessionByHour().name())
@@ -69,6 +71,13 @@ public class MissionManager {
 
     public boolean isAdditionalMeasureMode() {
         return "1".equals(sp.getString(todayKey + "_force_event", null));
+    }
+
+    /** EVENT 세션에 진행 중인(일부 완료) 추가 측정이 있는지 */
+    public boolean hasEventInProgress() {
+        Session e = Session.EVENT;
+        int done = getCompletedCount(e);
+        return done > 0 && done < 3;
     }
 
     public Session getActiveSession() {
@@ -82,7 +91,6 @@ public class MissionManager {
     }
 
     public void setActiveSession(Session session) {
-        // 수동 전환 비활성: 추가측정만 허용
         if (session == Session.EVENT) {
             setAdditionalMeasureMode(true);
         } else {
@@ -119,7 +127,6 @@ public class MissionManager {
     }
 
     public void setHrvDone() {
-        // commit: 대시보드 onResume에서 추가모드 해제 전에 별 상태가 반영되도록
         sp.edit().putBoolean(k(getActiveSession(), "hrv"), true).commit();
         updateStarsAfterProgress();
     }
@@ -130,7 +137,11 @@ public class MissionManager {
     }
 
     public void setDiaryDone() {
-        sp.edit().putBoolean(k(getActiveSession(), "diary"), true).commit();
+        Session active = getActiveSession();
+        sp.edit().putBoolean(k(active, "diary"), true).commit();
+        if (active == Session.EVENT && isSessionAllDone(Session.EVENT)) {
+            recordAdditionalCompletion();
+        }
         updateStarsAfterProgress();
     }
 
@@ -144,6 +155,15 @@ public class MissionManager {
 
     public void clearDiary() {
         sp.edit().putBoolean(k(getActiveSession(), "diary"), false).apply();
+    }
+
+    public void clearEventMissions() {
+        Session s = Session.EVENT;
+        sp.edit()
+                .putBoolean(k(s, "hrv"), false)
+                .putBoolean(k(s, "ema"), false)
+                .putBoolean(k(s, "diary"), false)
+                .apply();
     }
 
     public void resetActiveSessionMissions() {
@@ -175,27 +195,51 @@ public class MissionManager {
         return getCompletedCount(s) >= 3;
     }
 
+    public int getAdditionalCompleteCount() {
+        return sp.getInt(todayKey + "_additional_count", 0);
+    }
+
+    public boolean canStartAdditional() {
+        return getAdditionalCompleteCount() < MAX_ADDITIONAL_PER_DAY;
+    }
+
+    private void recordAdditionalCompletion() {
+        int n = getAdditionalCompleteCount();
+        if (n < MAX_ADDITIONAL_PER_DAY) {
+            sp.edit().putInt(todayKey + "_additional_count", n + 1).apply();
+        }
+    }
+
     private void updateStarsAfterProgress() {
-        int dayIndex = dayOfWeekIndex();
+        int dayIndex = studyStarIndex();
+        if (dayIndex < 0 || dayIndex > 6) return;
+
         boolean am = isSessionAllDone(Session.MORNING);
         boolean pm = isSessionAllDone(Session.AFTERNOON);
-        // 추가 측정은 HRV만 진행하므로 EVENT HRV 완료 = 추가 측정 완료
-        boolean extra = isHrvDone(Session.EVENT);
+        boolean bonus = getAdditionalCompleteCount() >= 1;
 
         int state = STAR_EMPTY;
         if (am && pm) {
-            state = extra ? STAR_BONUS : STAR_FULL;
+            state = bonus ? STAR_BONUS : STAR_FULL;
         } else if (am || pm) {
-            // 오전·오후 한쪽만 끝난 뒤 추가 측정을 해도 반은 유지하되,
-            // 추가까지 했으면 특수 별로 표시해 변화를 알 수 있게 함
-            state = extra ? STAR_BONUS : STAR_HALF;
-        } else if (extra) {
-            // 메인 미션 없이 추가만 한 경우(비정상 경로)에도 표시
+            // 반개 + 추가 완료 시에도 특수 효과
+            state = bonus ? STAR_BONUS : STAR_HALF;
+        } else if (bonus) {
             state = STAR_BONUS;
         }
         setStarState(dayIndex, state);
     }
 
+    /** 연구 시작일 기준 0~6 (왼쪽부터 순차). 요일과 무관. */
+    public int studyStarIndex() {
+        SessionManager sm = new SessionManager(appCtx);
+        int idx = sm.getStudyDayIndex();
+        if (idx < 0) return 0;
+        if (idx > 6) return 6;
+        return idx;
+    }
+
+    /** @deprecated 별은 studyStarIndex 사용 */
     public static int dayOfWeekIndex() {
         int cal = Calendar.getInstance().get(Calendar.DAY_OF_WEEK);
         return (cal + 5) % 7;
@@ -206,14 +250,15 @@ public class MissionManager {
     }
 
     private void setStarState(int dayIndex, int state) {
-        sp.edit().putInt(weekKey() + "_star_" + dayIndex, state).commit();
+        sp.edit().putInt(weekKey() + "_star_" + dayIndex, state).apply();
     }
 
     private String weekKey() {
-        Calendar c = Calendar.getInstance();
-        c.setFirstDayOfWeek(Calendar.MONDAY);
-        c.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
-        return new SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(c.getTime()) + "_week";
+        // 연구 주간 키: 연구 시작일 기준 (요일 월요일 고정 아님)
+        SessionManager sm = new SessionManager(appCtx);
+        long start = sm.getStudyStartMs();
+        if (start <= 0) start = System.currentTimeMillis();
+        return new SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(new Date(start)) + "_study";
     }
 
     public String sessionLabel(Session s) {

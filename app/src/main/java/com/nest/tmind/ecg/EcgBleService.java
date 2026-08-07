@@ -226,7 +226,7 @@ public class EcgBleService extends Service {
         );
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground) // 프로젝트 아이콘으로 교체
+                .setSmallIcon(R.drawable.ic_notification_heart)
                 .setContentTitle("심박 측정 서비스")
                 .setContentText("BLE 기기와 연결 유지 중입니다.")
                 .setOngoing(true)

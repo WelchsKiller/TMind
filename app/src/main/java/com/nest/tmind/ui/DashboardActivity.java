@@ -83,7 +83,10 @@ public class DashboardActivity extends BaseSeniorActivity {
     protected void onResume() {
         super.onResume();
         mission = new MissionManager(this);
-        mission.setAdditionalMeasureMode(false);
+        // 추가 측정 진행 중이면 모드 유지
+        if (!mission.hasEventInProgress()) {
+            mission.setAdditionalMeasureMode(false);
+        }
         refreshUi();
     }
 
@@ -104,9 +107,24 @@ public class DashboardActivity extends BaseSeniorActivity {
             Toast.makeText(this, R.string.additional_measure_need_hrv, Toast.LENGTH_SHORT).show();
             return;
         }
-        // 추가 측정은 심박변이도만 진행
+        if (!mission.canStartAdditional() && !mission.hasEventInProgress()) {
+            Toast.makeText(this, R.string.additional_measure_max, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // 추가 측정: 심박변이도 → 마음상태 → 마음일기
         mission.setAdditionalMeasureMode(true);
-        openHrv();
+        MissionManager.Session event = MissionManager.Session.EVENT;
+        if (!mission.isHrvDone(event)) {
+            openHrv();
+        } else if (!mission.isEmaDone(event)) {
+            openEma();
+        } else if (!mission.isDiaryDone(event)) {
+            openDiary();
+        } else {
+            // 한 사이클 완료 후 다시 시작 (하루 최대 5회)
+            mission.clearEventMissions();
+            openHrv();
+        }
     }
 
     /** 오늘 오전/오후 중 심박변이도 미션을 한 번이라도 완료하면 추가 측정 가능 */
@@ -190,7 +208,8 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void refreshUi() {
-        MissionManager.Session active = mission.getActiveSession();
+        // 메인 카드는 항상 오전/오후 기준 (추가 측정 진행 중에도)
+        MissionManager.Session active = MissionManager.mainSessionByHour();
         int done = mission.getCompletedCount(active);
         tvProgress.setText(getString(R.string.mission_progress_session,
                 mission.sessionLabel(active), done));
@@ -214,13 +233,21 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void refreshAdditionalCard() {
         boolean unlocked = isAdditionalUnlocked();
-        cardAdditional.setEnabled(unlocked);
+        boolean canMore = mission.canStartAdditional() || mission.hasEventInProgress();
+        boolean active = unlocked && canMore;
+        cardAdditional.setEnabled(active);
         cardAdditional.setClickable(true);
-        cardAdditional.setAlpha(unlocked ? 1f : 0.45f);
-        tvAdditionalSub.setText(unlocked
-                ? R.string.additional_measure_sub
-                : R.string.additional_measure_locked);
-        if (unlocked) {
+        cardAdditional.setAlpha(active ? 1f : 0.45f);
+        if (!unlocked) {
+            tvAdditionalSub.setText(R.string.additional_measure_locked);
+        } else if (!canMore) {
+            tvAdditionalSub.setText(R.string.additional_measure_max);
+        } else {
+            int n = mission.getAdditionalCompleteCount();
+            tvAdditionalSub.setText(getString(R.string.additional_measure_sub_count,
+                    n, MissionManager.MAX_ADDITIONAL_PER_DAY));
+        }
+        if (active) {
             cardAdditional.setBackgroundResource(R.drawable.bg_btn_outline);
         } else {
             cardAdditional.setBackgroundResource(R.drawable.bg_mission_card_completed);

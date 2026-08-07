@@ -25,14 +25,30 @@
             android:layout_height="wrap_content"
             android:text="@string/russell_example_joy"
             android:textColor="@color/black"
-            android:textSize="16sp" />
+            android:textSize="15sp" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
+            android:text="@string/russell_example_tense"
+            android:textColor="@color/black"
+            android:textSize="15sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="@string/russell_example_sad"
             android:textColor="@color/black"
-            android:textSize="16sp" />
+            android:textSize="15sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/russell_example_calm"
+            android:textColor="@color/black"
+            android:textSize="15sp" />
     </LinearLayout>
 </LinearLayout>

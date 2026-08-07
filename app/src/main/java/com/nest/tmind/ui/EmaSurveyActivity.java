@@ -270,6 +270,26 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
 
         new MissionManager(this).setEmaDone();
         session.saveEmaProgress(0, answers); // 수정 후에도 답 유지 (다음 수정 시 복원 보조)
+
+        MissionManager mission = new MissionManager(this);
+        boolean additional = mission.isAdditionalMeasureMode();
+
+        // 수정 모드가 아니고 3미션 모두 완료 → 사분면 (완료 순서 무관)
+        if (!editMode && mission.isAllDone()) {
+            if (additional) {
+                mission.clearEventMissions();
+                mission.setAdditionalMeasureMode(false);
+            }
+            startActivity(new Intent(this, AnalysisResultActivity.class));
+            finish();
+            return;
+        }
+
+        if (!editMode && additional) {
+            startActivity(new Intent(this, VoiceDiaryActivity.class));
+            finish();
+            return;
+        }
         goDashboard();
     }
 

@@ -71,5 +71,6 @@ public class HrvGuideActivity extends BaseSeniorActivity {
         }
 
         startActivity(new Intent(this, HrvMeasureActivity.class));
+        finish();
     }
 }

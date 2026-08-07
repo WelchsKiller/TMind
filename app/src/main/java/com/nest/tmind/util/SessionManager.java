@@ -14,6 +14,8 @@ public class SessionManager {
     private static final String KEY_EMA_INDEX = "ema_index";
     private static final String KEY_EMA_ANSWERS = "ema_answers";
     private static final String KEY_USER_NAME = "user_name";
+    private static final String KEY_USER_GENDER = "user_gender";
+    private static final String KEY_USER_AGE = "user_age";
     private static final String KEY_LOGGED_IN = "logged_in";
     private static final String KEY_STUDY_START = "study_start_ms";
     /** 연구 참여 일수 (종료 후 7일 추이 제공) */
@@ -25,14 +27,29 @@ public class SessionManager {
         sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
     }
 
-    public void setLoggedIn(String userName) {
+    public void setProfile(String userName, String gender, int age) {
         SharedPreferences.Editor ed = sp.edit()
                 .putBoolean(KEY_LOGGED_IN, true)
-                .putString(KEY_USER_NAME, userName);
+                .putString(KEY_USER_NAME, userName)
+                .putString(KEY_USER_GENDER, gender)
+                .putInt(KEY_USER_AGE, age);
         if (sp.getLong(KEY_STUDY_START, 0L) <= 0L) {
             ed.putLong(KEY_STUDY_START, System.currentTimeMillis());
         }
         ed.apply();
+    }
+
+    /** @deprecated 프로필 등록은 setProfile 사용 */
+    public void setLoggedIn(String userName) {
+        setProfile(userName, sp.getString(KEY_USER_GENDER, ""), sp.getInt(KEY_USER_AGE, 0));
+    }
+
+    public String getUserGender() {
+        return sp.getString(KEY_USER_GENDER, "");
+    }
+
+    public int getUserAge() {
+        return sp.getInt(KEY_USER_AGE, 0);
     }
 
     public long getStudyStartMs() {
@@ -71,7 +88,7 @@ public class SessionManager {
     }
 
     public String getUserName() {
-        return sp.getString(KEY_USER_NAME, "김순자");
+        return sp.getString(KEY_USER_NAME, "");
     }
 
     public void saveScreen(String screen) {

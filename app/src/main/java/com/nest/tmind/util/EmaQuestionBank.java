@@ -94,17 +94,24 @@ public final class EmaQuestionBank {
     }
 
     public static String[] emojisFor(Item item) {
-        // 문항과 무관하게 항상 동일 순서 (부정/강함 → 긍정/없음)
+        if (item != null && item.emotionScale && !item.negativeValence) {
+            return EMOJIS_AGREE; // 긍정 문항: 좋음(위) → 나쁨(아래)
+        }
         return EMOJIS_INTENSITY;
     }
 
     /**
      * 화면 위→아래 displayIndex 0~4 에 대응하는 drawable.
-     * 항상 emoji_1(빨강) … emoji_5(초록) 고정 — 문항마다 바뀌지 않음.
+     * 부정/강도 문항: emoji_1(빨강)…emoji_5(초록)
+     * 긍정 문항(행복·신남·차분): emoji_5(초록)…emoji_1(빨강) — "매우 그렇다"가 긍정 표정
      */
     public static int drawableResFor(Item item, int displayIndex) {
         if (displayIndex < 0 || displayIndex > 4) return R.drawable.emoji_3;
-        switch (displayIndex + 1) {
+        int idx = displayIndex;
+        if (item != null && item.emotionScale && !item.negativeValence) {
+            idx = 4 - displayIndex;
+        }
+        switch (idx + 1) {
             case 1: return R.drawable.emoji_1;
             case 2: return R.drawable.emoji_2;
             case 3: return R.drawable.emoji_3;
@@ -116,6 +123,9 @@ public final class EmaQuestionBank {
     /** displayIndex 0~4 에 대한 구분 색상 (ARGB) — 레거시/텍스트용 */
     public static int colorFor(Item item, int displayIndex) {
         if (displayIndex < 0 || displayIndex > 4) return 0xFF757575;
+        if (item != null && item.emotionScale && !item.negativeValence) {
+            return COLORS_GOOD_TO_BAD[displayIndex];
+        }
         return COLORS_BAD_TO_GOOD[displayIndex];
     }
 

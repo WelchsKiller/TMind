@@ -46,7 +46,7 @@
         <activity
             android:name=".ui.LoginActivity"
             android:exported="false"
-            android:windowSoftInputMode="stateAlwaysHidden" />
+            android:windowSoftInputMode="adjustResize" />
 
         <activity android:name=".ui.DashboardActivity" android:launchMode="singleTop" />
         <activity android:name=".ui.HrvGuideActivity" />

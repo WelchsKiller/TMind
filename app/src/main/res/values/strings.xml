@@ -7,6 +7,19 @@
     <string name="login_title">로그인</string>
     <string name="login_hint">받으신 8자리 번호를 눌러주세요</string>
     <string name="login_tts">로그인. 받으신 8자리 번호를 눌러주세요.</string>
+    <string name="profile_title">처음 만나 반가워요</string>
+    <string name="profile_hint">이름, 성별, 나이를 입력해 주세요.\n다음부터는 자동으로 시작됩니다.</string>
+    <string name="profile_name">이름</string>
+    <string name="profile_name_hint">이름을 입력해 주세요</string>
+    <string name="profile_gender">성별</string>
+    <string name="profile_gender_female">여성</string>
+    <string name="profile_gender_male">남성</string>
+    <string name="profile_age">나이</string>
+    <string name="profile_age_hint">숫자로 입력해 주세요</string>
+    <string name="profile_start">시작하기</string>
+    <string name="profile_need_name">이름을 입력해 주세요</string>
+    <string name="profile_need_gender">성별을 선택해 주세요</string>
+    <string name="profile_need_age">나이를 올바르게 입력해 주세요</string>
     <string name="key_clear">지움</string>
     <string name="key_confirm">확인</string>
     <string name="read_aloud">읽어주기</string>
@@ -26,11 +39,13 @@
     <string name="session_morning">오전</string>
     <string name="session_afternoon">오후</string>
     <string name="session_event">추가</string>
-    <string name="star_hint">오전·오후 미션을 각각 완료하면 별이 채워지고, 추가 측정까지 하면 특별 별이 됩니다</string>
+    <string name="star_hint">연구 일차마다 왼쪽부터 별이 채워집니다. 오전·오후 미션을 각각 완료하면 반개씩, 추가 측정을 하면 특별 별이 됩니다</string>
     <string name="additional_measure_title">추가 측정</string>
-    <string name="additional_measure_sub">심박변이도 측정을 추가로 진행할 수 있어요.</string>
+    <string name="additional_measure_sub">심박변이도·마음상태·마음일기를 추가로 진행할 수 있어요.</string>
+    <string name="additional_measure_sub_count">추가 측정 %1$d/%2$d회 · 심박변이도 → 마음상태 → 마음일기</string>
     <string name="additional_measure_locked">심박변이도 측정을 먼저 완료하면 이용할 수 있어요.</string>
     <string name="additional_measure_need_hrv">심박변이도 측정을 먼저 완료해 주세요</string>
+    <string name="additional_measure_max">오늘은 추가 측정을 모두 완료했어요 (최대 5회)</string>
     <string name="mission_already_done">이미 완료한 미션입니다</string>
     <string name="mission_edit_confirm">이미 완료된 미션입니다.\n수정하시겠습니까?</string>
     <string name="dialog_edit">수정</string>
@@ -39,11 +54,13 @@
     <string name="weekly_trend_button">7일 정서 추이 보기</string>
     <string name="weekly_trend_title">7일 정서 추이</string>
     <string name="weekly_trend_subtitle">연구 기간 동안의 심박변이도 기반 정서 위치를 보여 줍니다</string>
-    <string name="weekly_trend_legend">점이 진할수록 최근 날짜입니다 · 가로=감정(부정적–긍정적), 세로=강도(약함–강함)</string>
+    <string name="weekly_trend_legend">점이 진할수록 최근 날짜입니다 · 가로=쾌–불쾌, 세로=각성–비각성</string>
     <string name="weekly_trend_empty">아직 저장된 측정 기록이 없습니다</string>
     <string name="russell_example_title">예시 감정</string>
-    <string name="russell_example_joy">😄  기쁨 · 긍정적 + 강함</string>
-    <string name="russell_example_sad">😔  우울 · 부정적 + 약함</string>
+    <string name="russell_example_joy">😄  기쁨 · 쾌 + 각성</string>
+    <string name="russell_example_tense">😰  긴장 · 불쾌 + 각성</string>
+    <string name="russell_example_sad">☹️  우울 · 불쾌 + 비각성</string>
+    <string name="russell_example_calm">😌  편안 · 쾌 + 비각성</string>
     <string name="dialog_yes">예</string>
     <string name="dialog_no">아니요</string>
     <string name="dialog_end">종료</string>
@@ -79,6 +96,7 @@
     <string name="confirm_result_hint">확인 버튼을 눌러 주세요</string>
     <string name="hrv_result_invalid">측정값이 정상적으로 나오지 않았습니다.\n다시 측정해 주세요.</string>
     <string name="hrv_remeasure">재측정</string>
+    <string name="hrv_confirm_error">다음 화면으로 이동하지 못했습니다. 다시 눌러 주세요.</string>
     <string name="bpm_label">심박수</string>
     <string name="hrv_ms_label">심박변이도</string>
     <string name="bpm_unit_format">%1$d 회/분</string>
@@ -111,7 +129,8 @@
     <string name="analysis_title">분석 결과</string>
     <string name="result_quadrant_hint">심박변이도로 살펴본 현재 정서 위치입니다</string>
     <string name="emotion_edit_title">현재 감정 수정하기</string>
-    <string name="emotion_edit_hint">클릭하여 위치를 수정해주세요.</string>
+    <string name="emotion_edit_hint">초록색 원을 손가락으로 움직여 현재 감정 상태와 가장 가까운 위치에 놓아주세요.</string>
+    <string name="emotion_edit_guide">💡 오른쪽 위: 기분이 좋고 활기차면\n💡 왼쪽 위: 긴장되거나 불안하면\n💡 왼쪽 아래: 우울하고 힘이 없으면\n💡 오른쪽 아래: 편안하고 안정되면</string>
     <string name="emotion_edit_confirm">수정하기</string>
     <string name="emotion_edit_need_point">위치를 선택해 주세요</string>
     <string name="disclaimer">본 결과는 현재 상태를 살펴보기 위한 참고 정보이며, 의학적 진단을 대신하지 않습니다.</string>

@@ -1,18 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#99000000"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="20dp">
+    android:padding="16dp">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
         android:background="@color/bg_senior"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -38,35 +37,65 @@
                 android:src="@drawable/ic_close" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/tvHint"
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/emotion_edit_hint"
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp" />
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true"
+            android:scrollbars="vertical">
 
-        <com.nest.tmind.view.RussellCircumplexView
-            android:id="@+id/russellView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="8dp">
 
-        <include
-            layout="@layout/include_russell_examples"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
+                <TextView
+                    android:id="@+id/tvHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="@string/emotion_edit_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="15sp" />
 
+                <TextView
+                    android:id="@+id/tvGuide"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_info_box"
+                    android:lineSpacingExtra="3dp"
+                    android:padding="12dp"
+                    android:text="@string/emotion_edit_guide"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+
+                <com.nest.tmind.view.RussellCircumplexView
+                    android:id="@+id/russellView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:minHeight="220dp" />
+
+                <include
+                    layout="@layout/include_russell_examples"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- 하단 고정: 작은 화면에서도 항상 보이게 -->
         <Button
             android:id="@+id/btnConfirm"
             style="@style/SeniorButton"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:background="@drawable/bg_btn_primary"
             android:text="@string/emotion_edit_confirm"
             android:textColor="@color/white" />
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>

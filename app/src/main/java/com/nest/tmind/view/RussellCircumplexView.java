@@ -11,7 +11,7 @@ import androidx.annotation.Nullable;
 
 /**
  * Russell circumplex 사분면 UI.
- * 가로=감정(부정적–긍정적), 세로=강도(약함–강함).
+ * 가로=쾌–불쾌, 세로=각성–비각성 (Russell circumplex).
  */
 public class RussellCircumplexView extends View {
 
@@ -169,24 +169,16 @@ public class RussellCircumplexView extends View {
         canvas.drawLine(cx - half, cy, cx + half, cy, axisPaint);
         canvas.drawLine(cx, cy - half, cx, cy + half, axisPaint);
 
-        // 축 이름 + 끝단 설명 (그림 스타일)
-        labelPaint.setTextAlign(Paint.Align.CENTER);
-        labelPaint.setTextSize(dp(14));
-        canvas.drawText("강도", cx, cy - half - dp(18), labelPaint);
-
+        // 축 끝단 설명 (Russell: 쾌–불쾌 / 각성–비각성)
         hintPaint.setTextAlign(Paint.Align.CENTER);
-        hintPaint.setTextSize(dp(12));
-        canvas.drawText("강함", cx, cy - half - dp(2), hintPaint);
-        canvas.drawText("약함", cx, cy + half + dp(16), hintPaint);
+        hintPaint.setTextSize(dp(13));
+        canvas.drawText("각성", cx, cy - half - dp(4), hintPaint);
+        canvas.drawText("비각성", cx, cy + half + dp(18), hintPaint);
 
         hintPaint.setTextAlign(Paint.Align.RIGHT);
-        canvas.drawText("부정적", cx - half - dp(2), cy - dp(8), hintPaint);
+        canvas.drawText("불쾌", cx - half - dp(4), cy - dp(6), hintPaint);
         hintPaint.setTextAlign(Paint.Align.LEFT);
-        canvas.drawText("긍정적", cx + half + dp(2), cy - dp(8), hintPaint);
-
-        labelPaint.setTextAlign(Paint.Align.LEFT);
-        labelPaint.setTextSize(dp(14));
-        canvas.drawText("감정", cx + half - dp(4), cy + dp(18), labelPaint);
+        canvas.drawText("쾌", cx + half + dp(4), cy - dp(6), hintPaint);
 
         if (trailValence != null && trailArousal != null) {
             for (int i = 0; i < trailValence.length; i++) {

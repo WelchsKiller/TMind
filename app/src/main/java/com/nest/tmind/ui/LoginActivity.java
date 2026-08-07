@@ -2,22 +2,21 @@ package com.nest.tmind.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.View;
-import android.widget.Button;
-import android.widget.TextView;
+import android.widget.EditText;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
+import android.widget.Toast;
 
 import com.nest.tmind.R;
 import com.nest.tmind.util.SessionManager;
 
-/** APP-USR-001: 8자리 번호 로그인 */
+/** 최초 1회: 이름·성별·나이 입력 후 자동 로그인 */
 public class LoginActivity extends BaseSeniorActivity {
 
-    private static final int CODE_LEN = 8;
-    private static final String DEMO_CODE = "012345678";
-
-    private final StringBuilder code = new StringBuilder();
-    private TextView[] slots;
     private SessionManager session;
+    private EditText etName, etAge;
+    private RadioGroup rgGender;
+    private RadioButton rbFemale, rbMale;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,55 +28,66 @@ public class LoginActivity extends BaseSeniorActivity {
         }
         setContentView(R.layout.activity_login);
 
-        slots = new TextView[]{
-                findViewById(R.id.slot1), findViewById(R.id.slot2),
-                findViewById(R.id.slot3), findViewById(R.id.slot4),
-                findViewById(R.id.slot5), findViewById(R.id.slot6),
-                findViewById(R.id.slot7), findViewById(R.id.slot8)
-        };
+        etName = findViewById(R.id.etName);
+        etAge = findViewById(R.id.etAge);
+        rgGender = findViewById(R.id.rgGender);
+        rbFemale = findViewById(R.id.rbFemale);
+        rbMale = findViewById(R.id.rbMale);
 
-        setupTtsButton(R.id.btnTts, getString(R.string.login_tts));
+        setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvHint);
+        findViewById(R.id.btnStart).setOnClickListener(v -> confirm());
 
-        int[] numIds = {
-                R.id.key1, R.id.key2, R.id.key3, R.id.key4, R.id.key5,
-                R.id.key6, R.id.key7, R.id.key8, R.id.key9, R.id.key0
-        };
-        for (int i = 0; i < numIds.length; i++) {
-            final String digit = String.valueOf(i == 9 ? 0 : i + 1);
-            findViewById(numIds[i]).setOnClickListener(v -> appendDigit(digit.charAt(0)));
-        }
-        findViewById(R.id.keyClear).setOnClickListener(v -> clearCode());
-        findViewById(R.id.keyConfirm).setOnClickListener(v -> confirm());
+        rbFemale.setOnCheckedChangeListener((b, checked) -> {
+            if (checked) highlightGender();
+        });
+        rbMale.setOnCheckedChangeListener((b, checked) -> {
+            if (checked) highlightGender();
+        });
+        highlightGender();
     }
 
-    private void appendDigit(char d) {
-        if (code.length() >= CODE_LEN) return;
-        code.append(d);
-        refreshSlots();
-    }
-
-    private void clearCode() {
-        code.setLength(0);
-        refreshSlots();
-    }
-
-    private void refreshSlots() {
-        for (int i = 0; i < CODE_LEN; i++) {
-            slots[i].setText(i < code.length() ? String.valueOf(code.charAt(i)) : "_");
-        }
+    private void highlightGender() {
+        int selected = R.drawable.bg_btn_primary;
+        int normal = R.drawable.bg_btn_outline;
+        int selectedText = getResources().getColor(R.color.white, getTheme());
+        int normalText = getResources().getColor(R.color.text_primary, getTheme());
+        boolean female = rbFemale.isChecked();
+        boolean male = rbMale.isChecked();
+        rbFemale.setBackgroundResource(female ? selected : normal);
+        rbFemale.setTextColor(female ? selectedText : normalText);
+        rbMale.setBackgroundResource(male ? selected : normal);
+        rbMale.setTextColor(male ? selectedText : normalText);
     }
 
     private void confirm() {
-        if (code.length() != CODE_LEN) {
-            tts.speak("8자리 번호를 모두 입력해 주세요");
+        String name = etName.getText() != null ? etName.getText().toString().trim() : "";
+        if (name.isEmpty()) {
+            Toast.makeText(this, R.string.profile_need_name, Toast.LENGTH_SHORT).show();
+            if (tts != null) tts.speak(getString(R.string.profile_need_name));
             return;
         }
-        String entered = code.toString();
-        if (entered.equals(DEMO_CODE) || entered.length() == CODE_LEN) {
-            session.setLoggedIn("김순자");
-            session.saveScreen("dashboard");
-            goDashboard();
+        int genderId = rgGender.getCheckedRadioButtonId();
+        if (genderId != R.id.rbFemale && genderId != R.id.rbMale) {
+            Toast.makeText(this, R.string.profile_need_gender, Toast.LENGTH_SHORT).show();
+            if (tts != null) tts.speak(getString(R.string.profile_need_gender));
+            return;
         }
+        String ageStr = etAge.getText() != null ? etAge.getText().toString().trim() : "";
+        int age;
+        try {
+            age = Integer.parseInt(ageStr);
+        } catch (Exception e) {
+            age = -1;
+        }
+        if (age < 1 || age > 120) {
+            Toast.makeText(this, R.string.profile_need_age, Toast.LENGTH_SHORT).show();
+            if (tts != null) tts.speak(getString(R.string.profile_need_age));
+            return;
+        }
+        String gender = genderId == R.id.rbFemale ? "F" : "M";
+        session.setProfile(name, gender, age);
+        session.saveScreen("dashboard");
+        goDashboard();
     }
 
     private void goDashboard() {

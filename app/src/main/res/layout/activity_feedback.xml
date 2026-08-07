@@ -41,7 +41,8 @@
         android:layout_marginTop="32dp"
         android:background="@drawable/bg_btn_primary"
         android:text="@string/interv_open"
-        android:textColor="@color/white" />
+        android:textColor="@color/white"
+        android:visibility="gone" />
 
     <Button
         android:id="@+id/btnHome"
