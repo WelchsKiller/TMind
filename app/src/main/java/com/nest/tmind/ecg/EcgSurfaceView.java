@@ -111,6 +111,9 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         computeMmToPx();
         alloc();
         startLoop();
+        if (staticMode) {
+            redrawStaticNow();
+        }
     }
 
     @Override
@@ -118,6 +121,9 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         rebuildCornerPath();
         computeMmToPx();
         alloc();
+        if (staticMode) {
+            redrawStaticNow();
+        }
     }
 
     @Override
@@ -407,18 +413,33 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         if (samples == null || samples.length == 0) return;
 
         staticFs = Math.max(50, Math.min(1000, fs));
-
-        // 🔹 결과 화면용 파형도 중간 샘플을 채워서 곡선처럼 보이게
         float[] smooth = roundifySegment(samples);
         staticSamples = smooth;
-
         staticMode = true;
 
+        // Surface 준비 전이면 렌더 루프가 staticMode로 그리도록 두고,
+        // 준비된 경우 즉시 한 번 더 그림
+        post(this::redrawStaticNow);
+    }
+
+    private void redrawStaticNow() {
+        if (!staticMode || staticSamples == null || staticSamples.length == 0) return;
         SurfaceHolder sh = getHolder();
-        Canvas sc = sh.lockCanvas();
-        if (sc != null) {
-            drawStatic(sc);
-            sh.unlockCanvasAndPost(sc);
+        if (sh.getSurface() == null || !sh.getSurface().isValid()) return;
+        Canvas sc = null;
+        try {
+            sc = sh.lockCanvas();
+            if (sc != null) {
+                drawStatic(sc);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (sc != null) {
+                try {
+                    sh.unlockCanvasAndPost(sc);
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 

@@ -10,11 +10,11 @@ import android.widget.Toast;
 import com.nest.tmind.R;
 import com.nest.tmind.util.SessionManager;
 
-/** 최초 1회: 이름·성별·나이 입력 후 자동 로그인 */
+/** 최초 등록: 휴대폰 끝 8자리 + 이름·성별·나이 → 이후 자동 로그인 */
 public class LoginActivity extends BaseSeniorActivity {
 
     private SessionManager session;
-    private EditText etName, etAge;
+    private EditText etPhone, etName, etAge;
     private RadioGroup rgGender;
     private RadioButton rbFemale, rbMale;
 
@@ -22,12 +22,13 @@ public class LoginActivity extends BaseSeniorActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         session = new SessionManager(this);
-        if (session.isLoggedIn()) {
+        if (session.isLoggedIn() && !getIntent().getBooleanExtra(EXTRA_FORCE_REGISTER, false)) {
             goDashboard();
             return;
         }
         setContentView(R.layout.activity_login);
 
+        etPhone = findViewById(R.id.etPhone);
         etName = findViewById(R.id.etName);
         etAge = findViewById(R.id.etAge);
         rgGender = findViewById(R.id.rgGender);
@@ -46,6 +47,8 @@ public class LoginActivity extends BaseSeniorActivity {
         highlightGender();
     }
 
+    public static final String EXTRA_FORCE_REGISTER = "force_register";
+
     private void highlightGender() {
         int selected = R.drawable.bg_btn_primary;
         int normal = R.drawable.bg_btn_outline;
@@ -60,6 +63,12 @@ public class LoginActivity extends BaseSeniorActivity {
     }
 
     private void confirm() {
+        String phone = etPhone.getText() != null ? etPhone.getText().toString().trim() : "";
+        if (phone.length() != 8) {
+            Toast.makeText(this, R.string.profile_need_phone, Toast.LENGTH_SHORT).show();
+            if (tts != null) tts.speak(getString(R.string.profile_need_phone));
+            return;
+        }
         String name = etName.getText() != null ? etName.getText().toString().trim() : "";
         if (name.isEmpty()) {
             Toast.makeText(this, R.string.profile_need_name, Toast.LENGTH_SHORT).show();
@@ -85,7 +94,7 @@ public class LoginActivity extends BaseSeniorActivity {
             return;
         }
         String gender = genderId == R.id.rbFemale ? "F" : "M";
-        session.setProfile(name, gender, age);
+        session.setProfile(phone, name, gender, age);
         session.saveScreen("dashboard");
         goDashboard();
     }

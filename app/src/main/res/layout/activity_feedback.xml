@@ -25,13 +25,15 @@
         android:textSize="28sp" />
 
     <TextView
+        android:id="@+id/tvFeedbackHint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:gravity="center"
         android:text="@string/interv_feedback_hint"
         android:textColor="@color/text_secondary"
-        android:textSize="16sp" />
+        android:textSize="16sp"
+        android:visibility="gone" />
 
     <Button
         android:id="@+id/btnIntervention"

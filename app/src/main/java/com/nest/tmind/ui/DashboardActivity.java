@@ -67,6 +67,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardAdditional.setOnClickListener(v -> openAdditional());
         btnWeeklyTrend.setOnClickListener(v ->
                 startActivity(new Intent(this, WeeklyTrendActivity.class)));
+        findViewById(R.id.btnNewParticipant).setOnClickListener(v -> confirmNewParticipant());
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -87,7 +88,23 @@ public class DashboardActivity extends BaseSeniorActivity {
         if (!mission.hasEventInProgress()) {
             mission.setAdditionalMeasureMode(false);
         }
+        mission.recalcStars();
         refreshUi();
+    }
+
+    private void confirmNewParticipant() {
+        new AlertDialog.Builder(this)
+                .setMessage(R.string.new_participant_confirm)
+                .setPositiveButton(R.string.dialog_yes, (d, w) -> {
+                    session.logoutForNewParticipant();
+                    Intent i = new Intent(this, LoginActivity.class);
+                    i.putExtra(LoginActivity.EXTRA_FORCE_REGISTER, true);
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(i);
+                    finish();
+                })
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .show();
     }
 
     private void confirmExitIfMissionsIncomplete() {
@@ -220,10 +237,10 @@ public class DashboardActivity extends BaseSeniorActivity {
         applyCardState(cardEma, mission.isEmaDone(active), R.drawable.bg_mission_card_ema);
         applyCardState(cardDiary, mission.isDiaryDone(active), R.drawable.bg_mission_card_diary);
 
-        TextView diarySub = cardDiary.findViewById(R.id.tvMissionSub);
-        diarySub.setText(mission.isDiaryDone(active)
-                ? R.string.mission_diary_sub
-                : R.string.mission_diary_active);
+        // 완료 여부는 체크만 표시 — 부제목은 고정(일관)
+        ((TextView) cardHrv.findViewById(R.id.tvMissionSub)).setText(R.string.mission_hrv_sub);
+        ((TextView) cardEma.findViewById(R.id.tvMissionSub)).setText(R.string.mission_ema_sub);
+        ((TextView) cardDiary.findViewById(R.id.tvMissionSub)).setText(R.string.mission_diary_active);
 
         btnWeeklyTrend.setVisibility(session.isStudyEnded() ? View.VISIBLE : View.GONE);
 
@@ -267,11 +284,18 @@ public class DashboardActivity extends BaseSeniorActivity {
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
             iv.setAdjustViewBounds(true);
             int state = mission.getStarState(i);
-            if (state >= MissionManager.STAR_BONUS) {
+            iv.clearColorFilter();
+            if (state == MissionManager.STAR_BONUS) {
+                // 오전+오후 완료 + 추가 → 특수 별
                 iv.setImageResource(R.drawable.star_2);
-            } else if (state >= MissionManager.STAR_FULL) {
+            } else if (state == MissionManager.STAR_FULL) {
                 iv.setImageResource(R.drawable.star_3);
-            } else if (state >= MissionManager.STAR_HALF) {
+            } else if (state == MissionManager.STAR_HALF_BONUS) {
+                // 반개 + 추가 특수 효과 (가득으로 보이지 않게)
+                iv.setImageResource(R.drawable.star_1);
+                iv.setColorFilter(ContextCompat.getColor(this, R.color.amber_accent),
+                        android.graphics.PorterDuff.Mode.SRC_ATOP);
+            } else if (state == MissionManager.STAR_HALF) {
                 iv.setImageResource(R.drawable.star_1);
             } else {
                 iv.setImageResource(R.drawable.star_4);

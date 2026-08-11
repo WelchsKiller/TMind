@@ -47,6 +47,28 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
+            android:text="@string/profile_phone"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/etPhone"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_btn_outline"
+            android:hint="@string/profile_phone_hint"
+            android:inputType="number"
+            android:maxLength="8"
+            android:maxLines="1"
+            android:paddingHorizontal="16dp"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp" />
+
+        <TextView
+            style="@style/SeniorBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
             android:text="@string/profile_name"
             android:textStyle="bold" />
 
@@ -132,6 +154,7 @@
             android:layout_width="match_parent"
             android:layout_height="60dp"
             android:layout_marginTop="32dp"
+            android:layout_marginBottom="16dp"
             android:background="@drawable/bg_btn_primary"
             android:text="@string/profile_start"
             android:textColor="@color/white" />

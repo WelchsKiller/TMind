@@ -180,18 +180,46 @@ public class HrvResultActivity extends BaseSeniorActivity {
         }
 
         if (LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
-            float[] spike = LastEcgResult.lastSpike;
-            int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
-            ecgView.post(() -> {
+            final float[] spike = LastEcgResult.lastSpike;
+            final int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
+            Runnable draw = () -> {
                 int w = Math.max(200, ecgView.getWidth());
                 float[] wave = resizeWave(spike, w);
                 normalizeWave(wave);
+                if (wave.length == 0) return;
                 ecgView.setSampleRateHz(fs);
                 ecgView.showStaticWave(wave, fs);
-            });
+            };
+            ecgView.post(draw);
+            // Surface/레이아웃 준비 후 한 번 더 (빈 그래프 방지)
+            ecgView.postDelayed(draw, 120);
+        } else if (resultValid) {
+            final int hrForWave = hr > 0 ? hr : 70;
+            Runnable draw = () -> {
+                int w = Math.max(200, ecgView.getWidth());
+                float[] wave = placeholderWave(w, hrForWave);
+                ecgView.setSampleRateHz(250);
+                ecgView.showStaticWave(wave, 250);
+            };
+            ecgView.post(draw);
+            ecgView.postDelayed(draw, 120);
         } else {
             ecgView.clearStreaming();
         }
+    }
+
+    /** 파형 미수집 시에도 결과 화면이 비지 않도록 심박 주기 안내 파형 */
+    private static float[] placeholderWave(int len, int hrBpm) {
+        float[] out = new float[Math.max(64, len)];
+        double period = 250.0 * 60.0 / Math.max(40, Math.min(180, hrBpm));
+        for (int i = 0; i < out.length; i++) {
+            double phase = (i % period) / period;
+            float v = 0f;
+            if (phase < 0.08) v = (float) Math.sin(phase / 0.08 * Math.PI) * 0.85f;
+            else if (phase < 0.2) v = (float) (-0.15 * Math.sin((phase - 0.08) / 0.12 * Math.PI));
+            out[i] = v * 0.5f;
+        }
+        return out;
     }
 
     private void goDashboard() {

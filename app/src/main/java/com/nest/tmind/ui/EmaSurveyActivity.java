@@ -68,10 +68,21 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             loadAnswersFromHistory();
             currentIndex = 0;
         } else if (!feedbackReselect) {
-            int[] saved = session.loadEmaAnswers(items.length);
-            if (saved != null && saved.length == items.length) {
+            // 같은 세션의 중간 저장만 복원 (오전→오후·추가 시 이전 답 유지 금지)
+            int[] saved = session.loadEmaAnswersForSession(sessionType.name(), items.length);
+            boolean any = false;
+            for (int a : saved) {
+                if (a > 0) {
+                    any = true;
+                    break;
+                }
+            }
+            if (any) {
                 answers = saved;
                 currentIndex = Math.min(session.getEmaIndex(), items.length - 1);
+            } else {
+                currentIndex = 0;
+                session.clearEmaProgress();
             }
         }
 
@@ -135,7 +146,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
                 answers = saved;
             }
         }
-        session.saveEmaProgress(0, answers);
+        session.saveEmaProgress(sessionType.name(), 0, answers);
     }
 
     private static EmaQuestionBank.Item[] emotionOnly() {
@@ -195,7 +206,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             }
         }
         if (!feedbackReselect) {
-            session.saveEmaProgress(currentIndex, answers);
+            session.saveEmaProgress(sessionType.name(), currentIndex, answers);
         }
     }
 
@@ -269,7 +280,8 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         }
 
         new MissionManager(this).setEmaDone();
-        session.saveEmaProgress(0, answers); // 수정 후에도 답 유지 (다음 수정 시 복원 보조)
+        // 다음 세션(오후·추가)에서 이전 답이 남지 않도록 진행 저장 삭제 (수정은 히스토리에서 복원)
+        session.clearEmaProgress();
 
         MissionManager mission = new MissionManager(this);
         boolean additional = mission.isAdditionalMeasureMode();

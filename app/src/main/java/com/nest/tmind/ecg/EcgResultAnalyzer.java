@@ -42,10 +42,14 @@ public final class EcgResultAnalyzer {
 
         float[] raw = EcgCapture.i().consumeAll();
         boolean fromWave = false;
+        float[] displayWave = null;
 
         if (raw != null && raw.length >= Math.max(r.fs, 400)) {
             // 배터리·발열에 따라 샘플 다운샘플
             float[] sampled = downsample(raw, stride);
+            // 표시용: R피크 실패해도 결과 화면에 그릴 구간 확보
+            displayWave = extractDisplaySegment(sampled, Math.max(spikeLen, r.fs * 2));
+
             Biquad hp = Biquad.highpass(r.fs, 0.67, 0.707);
             Biquad notch = heavy ? Biquad.notch(r.fs, 60.0, 30.0) : null;
             Biquad lp = Biquad.lowpass(r.fs, 18.0, 0.707);
@@ -73,6 +77,12 @@ public final class EcgResultAnalyzer {
                     fromWave = true;
                 }
             }
+            // R피크/평균비트 실패 시에도 원본 구간으로 그래프 표시
+            if (!fromWave && displayWave != null && displayWave.length > 10) {
+                r.spike = displayWave;
+                fromWave = true;
+                Log.i(TAG, "analyze: using raw display segment len=" + displayWave.length);
+            }
         }
 
         // 세션 중 기기 HR 평균이 있으면 결과 표시에 우선 사용
@@ -88,9 +98,13 @@ public final class EcgResultAnalyzer {
             r.hrvMs = sessionHrv;
         }
 
-        // 파형 분석 실패해도 세션 평균이 있으면 결과로 저장 (재측정/-- 공백 방지)
-        if (!fromWave && (sessionHr > 0 || sessionHrv > 0)) {
-            r.spike = new float[0];
+        // 파형 분석 실패해도 세션 평균이 있으면 결과로 저장
+        if ((r.spike == null || r.spike.length == 0) && (sessionHr > 0 || sessionHrv > 0)) {
+            if (displayWave != null && displayWave.length > 10) {
+                r.spike = displayWave;
+            } else {
+                r.spike = new float[0];
+            }
             fromWave = true;
         }
 
@@ -98,6 +112,9 @@ public final class EcgResultAnalyzer {
             r.valid = false;
             return r;
         }
+
+        // spike null 방지
+        if (r.spike == null) r.spike = new float[0];
 
         int hrvForScore = 0;
         r.stressScore = 0;
@@ -111,6 +128,29 @@ public final class EcgResultAnalyzer {
         LastEcgResult.updateAndSave(ctx, r.spike, r.fs, r.hrBpm, r.hrvMs, r.rrMs,
                 r.stressScore, r.measuredAt);
         return r;
+    }
+
+    /** 결과 화면용: 최근 구간을 잘라 표시 (피크 검출 실패 대비) */
+    private static float[] extractDisplaySegment(float[] sampled, int maxLen) {
+        if (sampled == null || sampled.length < 16) return null;
+        int len = Math.min(sampled.length, Math.max(64, maxLen));
+        int start = sampled.length - len;
+        float[] out = new float[len];
+        System.arraycopy(sampled, start, out, 0, len);
+        // DC 제거
+        float mean = 0f;
+        for (float v : out) mean += v;
+        mean /= len;
+        float maxAbs = 0f;
+        for (int i = 0; i < len; i++) {
+            out[i] -= mean;
+            maxAbs = Math.max(maxAbs, Math.abs(out[i]));
+        }
+        if (maxAbs > 1e-6f) {
+            float s = 0.8f / maxAbs;
+            for (int i = 0; i < len; i++) out[i] *= s;
+        }
+        return out;
     }
 
     private static float[] downsample(float[] raw, int stride) {

@@ -14,10 +14,12 @@ public class SessionManager {
     private static final String KEY_EMA_INDEX = "ema_index";
     private static final String KEY_EMA_ANSWERS = "ema_answers";
     private static final String KEY_USER_NAME = "user_name";
+    private static final String KEY_USER_PHONE = "user_phone";
     private static final String KEY_USER_GENDER = "user_gender";
     private static final String KEY_USER_AGE = "user_age";
     private static final String KEY_LOGGED_IN = "logged_in";
     private static final String KEY_STUDY_START = "study_start_ms";
+    private static final String KEY_EMA_SESSION = "ema_session_type";
     /** 연구 참여 일수 (종료 후 7일 추이 제공) */
     public static final int STUDY_DAYS = 7;
 
@@ -27,21 +29,31 @@ public class SessionManager {
         sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
     }
 
-    public void setProfile(String userName, String gender, int age) {
+    public void setProfile(String phoneTail8, String userName, String gender, int age) {
         SharedPreferences.Editor ed = sp.edit()
                 .putBoolean(KEY_LOGGED_IN, true)
+                .putString(KEY_USER_PHONE, phoneTail8 != null ? phoneTail8 : "")
                 .putString(KEY_USER_NAME, userName)
                 .putString(KEY_USER_GENDER, gender)
                 .putInt(KEY_USER_AGE, age);
-        if (sp.getLong(KEY_STUDY_START, 0L) <= 0L) {
-            ed.putLong(KEY_STUDY_START, System.currentTimeMillis());
-        }
+        // 새 참여자 등록 시 연구 일차를 새로 시작
+        ed.putLong(KEY_STUDY_START, System.currentTimeMillis());
         ed.apply();
+    }
+
+    /** @deprecated setProfile(phone, name, gender, age) 사용 */
+    public void setProfile(String userName, String gender, int age) {
+        setProfile(sp.getString(KEY_USER_PHONE, ""), userName, gender, age);
     }
 
     /** @deprecated 프로필 등록은 setProfile 사용 */
     public void setLoggedIn(String userName) {
-        setProfile(userName, sp.getString(KEY_USER_GENDER, ""), sp.getInt(KEY_USER_AGE, 0));
+        setProfile(sp.getString(KEY_USER_PHONE, ""), userName,
+                sp.getString(KEY_USER_GENDER, ""), sp.getInt(KEY_USER_AGE, 0));
+    }
+
+    public String getUserPhone() {
+        return sp.getString(KEY_USER_PHONE, "");
     }
 
     public String getUserGender() {
@@ -99,13 +111,14 @@ public class SessionManager {
         return sp.getString(KEY_SCREEN, "");
     }
 
-    public void saveEmaProgress(int index, int[] answers) {
+    public void saveEmaProgress(String sessionType, int index, int[] answers) {
         try {
             JSONArray arr = new JSONArray();
             if (answers != null) {
                 for (int a : answers) arr.put(a);
             }
             sp.edit()
+                    .putString(KEY_EMA_SESSION, sessionType != null ? sessionType : "")
                     .putInt(KEY_EMA_INDEX, index)
                     .putString(KEY_EMA_ANSWERS, arr.toString())
                     .apply();
@@ -113,8 +126,29 @@ public class SessionManager {
         }
     }
 
+    /** @deprecated sessionType 포함 오버로드 사용 */
+    public void saveEmaProgress(int index, int[] answers) {
+        saveEmaProgress(sp.getString(KEY_EMA_SESSION, ""), index, answers);
+    }
+
+    public String getEmaSessionType() {
+        return sp.getString(KEY_EMA_SESSION, "");
+    }
+
     public int getEmaIndex() {
         return sp.getInt(KEY_EMA_INDEX, 0);
+    }
+
+    /**
+     * 동일 세션 타입의 진행 중 답만 복원. 다른 세션(오전→오후·추가)이면 빈 배열.
+     */
+    public int[] loadEmaAnswersForSession(String sessionType, int size) {
+        int[] out = new int[size];
+        for (int i = 0; i < size; i++) out[i] = 0;
+        if (sessionType == null || !sessionType.equals(getEmaSessionType())) {
+            return out;
+        }
+        return loadEmaAnswers(size);
     }
 
     public int[] loadEmaAnswers(int size) {
@@ -130,6 +164,19 @@ public class SessionManager {
         } catch (Exception ignored) {
         }
         return out;
+    }
+
+    public void clearEmaProgress() {
+        sp.edit()
+                .remove(KEY_EMA_SESSION)
+                .remove(KEY_EMA_INDEX)
+                .remove(KEY_EMA_ANSWERS)
+                .apply();
+    }
+
+    /** 연구 태블릿 등: 다른 참여자 등록을 위해 로그인만 해제 */
+    public void logoutForNewParticipant() {
+        sp.edit().clear().apply();
     }
 
     public void clearSession() {

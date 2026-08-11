@@ -19,11 +19,12 @@ public class MissionManager {
         MORNING, AFTERNOON, EVENT
     }
 
-    /** 0=빈, 1=반, 2=가득, 3=가득+특수(추가측정) */
+    /** 0=빈, 1=반, 2=가득, 3=가득+특수, 4=반+특수(추가) */
     public static final int STAR_EMPTY = 0;
     public static final int STAR_HALF = 1;
     public static final int STAR_FULL = 2;
     public static final int STAR_BONUS = 3;
+    public static final int STAR_HALF_BONUS = 4;
 
     public static final int MAX_ADDITIONAL_PER_DAY = 5;
 
@@ -210,6 +211,11 @@ public class MissionManager {
         }
     }
 
+    /** 대시보드 진입 시 오늘 별 상태를 규칙에 맞게 재계산 */
+    public void recalcStars() {
+        updateStarsAfterProgress();
+    }
+
     private void updateStarsAfterProgress() {
         int dayIndex = studyStarIndex();
         if (dayIndex < 0 || dayIndex > 6) return;
@@ -220,13 +226,13 @@ public class MissionManager {
 
         int state = STAR_EMPTY;
         if (am && pm) {
+            // 오전+오후 = 가득, 추가까지 하면 특수 별
             state = bonus ? STAR_BONUS : STAR_FULL;
         } else if (am || pm) {
-            // 반개 + 추가 완료 시에도 특수 효과
-            state = bonus ? STAR_BONUS : STAR_HALF;
-        } else if (bonus) {
-            state = STAR_BONUS;
+            // 한쪽만 = 반개, 추가하면 반개+특수효과 (가득으로 올리지 않음)
+            state = bonus ? STAR_HALF_BONUS : STAR_HALF;
         }
+        // 추가만으로는 별을 채우지 않음
         setStarState(dayIndex, state);
     }
 
