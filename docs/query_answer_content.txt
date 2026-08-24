@@ -1,0 +1,155 @@
+하루마음(TMind) 앱 질의서 답변
+
+작성 기준: 현재 TMind Android 앱 구현 코드
+작성일: 2026-08-24
+
+
+1. 대시보드 (오늘의 기록)
+
+질문1. 세션 선택 화면이 따로 있나요?
+
+답변: 아니요. 오전/오후/이벤트를 고르는 별도 선택 화면은 없습니다.
+
+[구분]              [동작]
+오전/오후           시각 자동 판별 — 12시 이전 = MORNING, 12시 이후 = AFTERNOON
+메인 화면           해당 세션의 3개 미션 카드(심박변이도 / 마음상태 / 마음일기)를 바로 표시
+EVENT               하단 「추가 측정」 버튼으로만 진입 (별도 세션 선택 없음)
+
+Figma처럼 "이미 진행 중인 세션"으로 보이는 이유는, 앱이 현재 시각 기준 세션을 자동 적용하기 때문입니다. 사용자가 세션을 고르지 않습니다.
+
+
+질문2. EVENT 세션 진입은 어떻게 되나요?
+
+답변: EVENT는 시간/날짜 자동 배치가 아닙니다. 사용자가 「추가 측정」을 눌러 시작합니다.
+
+■ 진입 조건
+  - 오늘 오전 또는 오후 중 심박변이도 미션을 1회 이상 완료한 뒤 활성화
+
+■ 진행 순서
+  - 심박변이도 → 마음상태 → 마음일기 (3미션)
+  - 하루 최대 5회까지 반복 가능
+
+■ 정리: 오전/오후 = 시간 자동, EVENT = 사용자 선택(추가 측정)
+
+
+요청. 앱 공유
+
+답변: 화면 흐름 확인용 APK/빌드 공유 가능합니다.
+참고: 서버 전송 API는 DataQueueManager에 TODO 상태로, 큐 적재까지는 되고 실제 HTTPS POST는 미연동입니다. 흐름 확인 후 API 스펙 확정을 권장합니다.
+
+
+2. 예측 관련
+
+질문1. predictedValence / predictedArousal / predictedText
+
+■ valence / arousal
+  - 타입: Float (실수)
+  - HRV 예측 범위: -1.0 ~ 1.0 (표시용으로 -1.2 ~ 1.2까지 허용)
+  - 좌표계: Russell Circumplex (쾌-불쾌 / 각성-비각성)
+  - 산출: stressScore(0~100) + hrvMs + hrBpm 기반 RussellEmotionCalculator 계산
+
+■ 서버 필드명 매핑 제안
+  - predictedValence ← 앱 valence
+  - predictedArousal ← 앱 arousal
+
+■ predictedText
+  - 현재 앱은 사용하지 않습니다.
+  - UI는 사분면 위치(점)만 표시, 감정 명칭/안내 문구 없음
+  - predictedText는 전송·저장하지 않음
+  - 서버 필드가 필수면 빈 문자열 또는 null 처리, 또는 추후 협의 후 추가 권장
+
+■ EMA Ground Truth (참고)
+  - 설문 완료 시 valence/arousal도 함께 산출되나, HRV 예측과 스케일이 다릅니다.
+  - EMA: Nandy 가중합 원시값 (대략 -4 ~ +4)
+  - HRV 예측: -1 ~ 1 정규화
+  - 서버 저장 시 sourceType: "HRV" / "EMA" 구분 권장
+
+
+이상치 탐지
+
+앱 내부 InterventionClassifier로 분류하지만, 현재 서버로는 미전송입니다.
+
+  STRESS              스트레스
+  FATIGUE_INSOMNIA    피로·불면
+  HRV_DECREASE        HRV 감소
+  LOW_ACTIVITY        활동 부족
+  AUTONOMIC_IMBALANCE 자율신경 불균형
+  BALANCED            정상
+
+서버 연동 시 제안: abnormalityType (String, enum 값)
+
+
+HRV 건너뛰기 / 신호 문제 시
+
+답변: 예측 결과를 보내지 않는 것이 맞습니다.
+
+  - hr 또는 hrv가 0 이하이면 측정 미완료, 분석(사분면) 미표시
+  - 3미션 미완료 시 분석 결과 화면 진입 안 함
+  - 유효 측정(hr, hrv 모두 0 초과) + 3미션 완료 시 그때만 예측·전송 대상
+
+
+서버에 함께 저장하면 좋은 값 (제안)
+
+{
+  "type": "hrv_analysis",
+  "ts": 1724467200000,
+  "sessionType": "MORNING",
+  "bpm": 72,
+  "hrvMs": 45,
+  "rrMs": 833,
+  "stressScore": 55,
+  "predictedValence": -0.15,
+  "predictedArousal": 0.28,
+  "fs": 250,
+  "measurementValid": true,
+  "abnormalityType": "STRESS"
+}
+
+■ 사용자 피드백(3미션 완료 후)
+{ "type": "feedback", "feedback": "agree | disagree | unknown", "ts": ... }
+
+■ 「아니요, 달랐어요」 시 수정 좌표
+{ "type": "emotion_edit", "valence": -0.5, "arousal": -0.3, "ts": ... }
+
+
+3. ECG 원본 및 HRV 지표
+
+질문1. HRV 관련 데이터 전송 가능 여부
+
+답변: 가능합니다. 다만 현재는 로컬 저장 위주이고, 서버 전송 스펙은 미확정입니다.
+
+
+질문2. 산출 데이터 및 형식
+
+■ 측정 1회당 (HRV 분석 결과)
+  ts            Long     측정 시각 (epoch ms)
+  sessionType   String   MORNING / AFTERNOON / EVENT
+  bpm           Int      심박수 (회/분), 유효 범위 40~180
+  hrvMs         Int      SDNN (ms), 대략 20~160
+  rrMs          Int      RR 간격 평균 (ms)
+  stressScore   Int      0~100 (HRV 기반 스트레스 지수)
+  fs            Int      샘플링 레이트 (기본 250 Hz)
+  valence/arousal Float  예측 좌표 (-1~1)
+
+■ 시계열(관리자 웹)용
+  - 위 필드를 userId + ts 기준으로 누적
+  - 일별: avgBpm, minBpm, maxBpm, avgHrvMs, minHrvMs, maxHrvMs, count
+  - 시간대별(24h): countPerHour, lastHrvMsPerHour, lastBpmPerHour, levelPerHour
+    (1=낮음, 2=중간, 3=높음)
+
+■ ECG 원본 신호
+  - 측정 중: EcgCapture에 250Hz 원본 누적
+  - 저장: 표시용 파형(spike) 위주, 전체 원본 서버 업로드는 미구현
+  - 서버 임상 보관 필요 시: 별도 업로드 API·용량·암호화 정책 협의 필요
+
+
+4. 요약 (서버팀 전달용)
+
+  세션 선택 화면     없음 — 오전/오후는 시간 자동, EVENT는 「추가 측정」
+  predictedValence/Arousal  Float, -1.0 ~ 1.0
+  predictedText      미사용 (사분면 UI만)
+  이상치             앱 내부 enum 있음, 서버 미전송 → abnormalityType 추가 가능
+  HRV 실패 시        예측 미전송
+  HRV 지표           bpm, hrvMs, rrMs, stressScore, ts, sessionType 등 전송 가능
+  ECG 원본           현재 미업로드, 별도 설계 필요
+  앱 공유            APK/빌드 공유 가능, API는 흐름 확인 후 확정 권장
