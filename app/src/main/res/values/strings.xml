@@ -8,10 +8,10 @@
     <string name="login_hint">받으신 8자리 번호를 눌러주세요</string>
     <string name="login_tts">로그인. 받으신 8자리 번호를 눌러주세요.</string>
     <string name="profile_title">처음 만나 반가워요</string>
-    <string name="profile_hint">휴대폰 번호 끝 8자리와 이름·성별·나이를 입력해 주세요.\n다음부터는 자동으로 시작됩니다.</string>
-    <string name="profile_phone">휴대폰 번호 끝 8자리</string>
+    <string name="profile_hint">휴대폰 번호 8자리와 이름·성별·나이를 입력해 주세요.\n다음부터는 자동으로 시작됩니다.</string>
+    <string name="profile_phone">휴대폰 번호 8자리</string>
     <string name="profile_phone_hint">숫자 8자리를 입력해 주세요</string>
-    <string name="profile_need_phone">휴대폰 번호 끝 8자리를 입력해 주세요</string>
+    <string name="profile_need_phone">휴대폰 번호 8자리를 입력해 주세요</string>
     <string name="profile_name">이름</string>
     <string name="profile_name_hint">이름을 입력해 주세요</string>
     <string name="profile_gender">성별</string>
@@ -42,7 +42,7 @@
     <string name="session_morning">오전</string>
     <string name="session_afternoon">오후</string>
     <string name="session_event">추가</string>
-    <string name="star_hint">오전·오후 미션을 완료할 때마다 별이 반 개씩 채워집니다.\n추가 측정까지 완료하면 특별한 별이 완성됩니다.</string>
+    <string name="star_hint">오전·오후 미션을 각각 완료하면 별이 반 개씩 채워집니다.\n오전·오후를 모두 완료하면 별이 가득 차요.\n한쪽만 완료하고 추가 측정을 하면 반 별에 특별한 효과가 더해집니다.</string>
     <string name="new_participant">다른 참여자로 시작</string>
     <string name="new_participant_confirm">현재 참여자 정보를 지우고\n새 참여자를 등록할까요?</string>
     <string name="additional_measure_title">추가 측정</string>

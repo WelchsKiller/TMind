@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "354001119995",
+    "project_id": "nest-backend-be715",
+    "storage_bucket": "nest-backend-be715.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:354001119995:android:9ddfb949f2a88b5da05e5e",
+        "android_client_info": {
+          "package_name": "com.nest.tmind"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCs49M8e3E6C8tVra-fou7xqda820zyRRs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

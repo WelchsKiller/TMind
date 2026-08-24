@@ -226,13 +226,13 @@ public class MissionManager {
 
         int state = STAR_EMPTY;
         if (am && pm) {
-            // 오전+오후 = 가득, 추가까지 하면 특수 별
+            // 오전+오후 모두 완료 → 가득, 추가까지 하면 특수 별
             state = bonus ? STAR_BONUS : STAR_FULL;
-        } else if (am || pm) {
-            // 한쪽만 = 반개, 추가하면 반개+특수효과 (가득으로 올리지 않음)
+        } else if (am ^ pm) {
+            // 한쪽만 완료 → 반별. 추가 측정 시 가득 찬 별이 아닌 반별+효과
             state = bonus ? STAR_HALF_BONUS : STAR_HALF;
         }
-        // 추가만으로는 별을 채우지 않음
+        // 추가만으로는 별을 채우지 않음 (am, pm 모두 false)
         setStarState(dayIndex, state);
     }
 

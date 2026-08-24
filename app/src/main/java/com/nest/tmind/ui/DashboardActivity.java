@@ -14,6 +14,8 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 
 import com.nest.tmind.R;
+import com.nest.tmind.api.ApiModels;
+import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.util.SessionManager;
@@ -29,6 +31,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     private LinearLayout starRow;
     private ProgressBar progressBar;
     private View btnWeeklyTrend;
+    private boolean serverEventActive = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,6 +80,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         });
 
         session.saveScreen("dashboard");
+        syncServerState();
         refreshUi();
     }
 
@@ -89,6 +93,7 @@ public class DashboardActivity extends BaseSeniorActivity {
             mission.setAdditionalMeasureMode(false);
         }
         mission.recalcStars();
+        syncServerState();
         refreshUi();
     }
 
@@ -96,6 +101,15 @@ public class DashboardActivity extends BaseSeniorActivity {
         new AlertDialog.Builder(this)
                 .setMessage(R.string.new_participant_confirm)
                 .setPositiveButton(R.string.dialog_yes, (d, w) -> {
+                    MemberApiManager.logout(this, new MemberApiManager.ResultCallback<Void>() {
+                        @Override
+                        public void onSuccess(Void data) {
+                        }
+
+                        @Override
+                        public void onError(String message) {
+                        }
+                    });
                     session.logoutForNewParticipant();
                     Intent i = new Intent(this, LoginActivity.class);
                     i.putExtra(LoginActivity.EXTRA_FORCE_REGISTER, true);
@@ -120,6 +134,10 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void openAdditional() {
+        if (!serverEventActive) {
+            Toast.makeText(this, "추가 측정은 현재 사용할 수 없습니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (!isAdditionalUnlocked()) {
             Toast.makeText(this, R.string.additional_measure_need_hrv, Toast.LENGTH_SHORT).show();
             return;
@@ -190,9 +208,23 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void openEma() {
-        Intent i = new Intent(this, EmaIntroActivity.class);
-        i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, mapEmaSession().name());
-        startActivity(i);
+        boolean event = mission.isAdditionalMeasureMode();
+        MemberApiManager.ensureSessionStarted(this, event, new MemberApiManager.ResultCallback<Long>() {
+            @Override
+            public void onSuccess(Long data) {
+                runOnUiThread(() -> {
+                    Intent i = new Intent(DashboardActivity.this, EmaIntroActivity.class);
+                    i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, mapEmaSession().name());
+                    startActivity(i);
+                });
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() ->
+                        Toast.makeText(DashboardActivity.this, message, Toast.LENGTH_LONG).show());
+            }
+        });
     }
 
     private void openEmaForEdit() {
@@ -215,7 +247,20 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void openDiary() {
-        startActivity(new Intent(this, VoiceDiaryActivity.class));
+        boolean event = mission.isAdditionalMeasureMode();
+        MemberApiManager.ensureSessionStarted(this, event, new MemberApiManager.ResultCallback<Long>() {
+            @Override
+            public void onSuccess(Long data) {
+                runOnUiThread(() ->
+                        startActivity(new Intent(DashboardActivity.this, VoiceDiaryActivity.class)));
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() ->
+                        Toast.makeText(DashboardActivity.this, message, Toast.LENGTH_LONG).show());
+            }
+        });
     }
 
     private void openDiaryForEdit() {
@@ -242,7 +287,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         ((TextView) cardEma.findViewById(R.id.tvMissionSub)).setText(R.string.mission_ema_sub);
         ((TextView) cardDiary.findViewById(R.id.tvMissionSub)).setText(R.string.mission_diary_active);
 
-        btnWeeklyTrend.setVisibility(session.isStudyEnded() ? View.VISIBLE : View.GONE);
+        btnWeeklyTrend.setVisibility(View.GONE);
 
         refreshAdditionalCard();
         renderStars();
@@ -250,7 +295,7 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void refreshAdditionalCard() {
         boolean unlocked = isAdditionalUnlocked();
-        boolean canMore = mission.canStartAdditional() || mission.hasEventInProgress();
+        boolean canMore = serverEventActive && (mission.canStartAdditional() || mission.hasEventInProgress());
         boolean active = unlocked && canMore;
         cardAdditional.setEnabled(active);
         cardAdditional.setClickable(true);
@@ -271,6 +316,39 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
     }
 
+    private void syncServerState() {
+        if (!session.hasRefreshToken()) return;
+        MemberApiManager.fetchToday(this, new MemberApiManager.ResultCallback<ApiModels.TodayResponse>() {
+            @Override
+            public void onSuccess(ApiModels.TodayResponse data) {
+                serverEventActive = data == null || data.eventActive;
+                runOnUiThread(DashboardActivity.this::refreshAdditionalCard);
+            }
+
+            @Override
+            public void onError(String message) {
+                MemberApiManager.showToast(DashboardActivity.this, message);
+            }
+        });
+        MemberApiManager.fetchParticipation(this,
+                new MemberApiManager.ResultCallback<ApiModels.ParticipationResponse>() {
+                    @Override
+                    public void onSuccess(ApiModels.ParticipationResponse data) {
+                        runOnUiThread(() -> {
+                            if (data != null && data.period != null) {
+                                btnWeeklyTrend.setVisibility(
+                                        data.period.participatedDays >= 7 ? View.VISIBLE : View.GONE);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(() -> btnWeeklyTrend.setVisibility(View.GONE));
+                    }
+                });
+    }
+
     private void renderStars() {
         starRow.removeAllViews();
         float d = getResources().getDisplayMetrics().density;
@@ -286,19 +364,15 @@ public class DashboardActivity extends BaseSeniorActivity {
             int state = mission.getStarState(i);
             iv.clearColorFilter();
             if (state == MissionManager.STAR_BONUS) {
-                // 오전+오후 완료 + 추가 → 특수 별
-                iv.setImageResource(R.drawable.star_2);
+                iv.setImageResource(R.drawable.ic_star_gold);
             } else if (state == MissionManager.STAR_FULL) {
-                iv.setImageResource(R.drawable.star_3);
+                iv.setImageResource(R.drawable.ic_star_filled);
             } else if (state == MissionManager.STAR_HALF_BONUS) {
-                // 반개 + 추가 특수 효과 (가득으로 보이지 않게)
-                iv.setImageResource(R.drawable.star_1);
-                iv.setColorFilter(ContextCompat.getColor(this, R.color.amber_accent),
-                        android.graphics.PorterDuff.Mode.SRC_ATOP);
+                iv.setImageResource(R.drawable.ic_star_half_bonus);
             } else if (state == MissionManager.STAR_HALF) {
-                iv.setImageResource(R.drawable.star_1);
+                iv.setImageResource(R.drawable.ic_star_half);
             } else {
-                iv.setImageResource(R.drawable.star_4);
+                iv.setImageResource(R.drawable.ic_star_empty);
             }
             starRow.addView(iv);
         }

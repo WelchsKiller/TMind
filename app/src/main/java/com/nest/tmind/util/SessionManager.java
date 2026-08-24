@@ -20,6 +20,12 @@ public class SessionManager {
     private static final String KEY_LOGGED_IN = "logged_in";
     private static final String KEY_STUDY_START = "study_start_ms";
     private static final String KEY_EMA_SESSION = "ema_session_type";
+    private static final String KEY_ACCESS_TOKEN = "access_token";
+    private static final String KEY_REFRESH_TOKEN = "refresh_token";
+    private static final String KEY_MAIN_SESSION_ID = "main_session_id";
+    private static final String KEY_EVENT_SESSION_ID = "event_session_id";
+    private static final String KEY_FCM_TOKEN = "fcm_token";
+    private static final String KEY_EVENT_ACTIVE_REMOTE = "event_active_remote";
     /** 연구 참여 일수 (종료 후 7일 추이 제공) */
     public static final int STUDY_DAYS = 7;
 
@@ -101,6 +107,67 @@ public class SessionManager {
 
     public String getUserName() {
         return sp.getString(KEY_USER_NAME, "");
+    }
+
+    public void setTokens(String accessToken, String refreshToken) {
+        sp.edit()
+                .putString(KEY_ACCESS_TOKEN, accessToken != null ? accessToken : "")
+                .putString(KEY_REFRESH_TOKEN, refreshToken != null ? refreshToken : "")
+                .apply();
+    }
+
+    public String getAccessToken() {
+        return sp.getString(KEY_ACCESS_TOKEN, "");
+    }
+
+    public String getRefreshToken() {
+        return sp.getString(KEY_REFRESH_TOKEN, "");
+    }
+
+    public boolean hasRefreshToken() {
+        return getRefreshToken() != null && !getRefreshToken().isEmpty();
+    }
+
+    public void clearTokens() {
+        sp.edit()
+                .remove(KEY_ACCESS_TOKEN)
+                .remove(KEY_REFRESH_TOKEN)
+                .apply();
+    }
+
+    public void setCurrentSessionId(boolean event, long sessionId) {
+        sp.edit().putLong(event ? KEY_EVENT_SESSION_ID : KEY_MAIN_SESSION_ID, sessionId).apply();
+    }
+
+    public long getCurrentSessionId(boolean event) {
+        return sp.getLong(event ? KEY_EVENT_SESSION_ID : KEY_MAIN_SESSION_ID, 0L);
+    }
+
+    public void clearCurrentSession(boolean event) {
+        sp.edit().remove(event ? KEY_EVENT_SESSION_ID : KEY_MAIN_SESSION_ID).apply();
+    }
+
+    public void clearAllCurrentSessions() {
+        sp.edit()
+                .remove(KEY_MAIN_SESSION_ID)
+                .remove(KEY_EVENT_SESSION_ID)
+                .apply();
+    }
+
+    public void setLastFcmToken(String token) {
+        sp.edit().putString(KEY_FCM_TOKEN, token != null ? token : "").apply();
+    }
+
+    public String getLastFcmToken() {
+        return sp.getString(KEY_FCM_TOKEN, "");
+    }
+
+    public void setRemoteEventActive(boolean active) {
+        sp.edit().putBoolean(KEY_EVENT_ACTIVE_REMOTE, active).apply();
+    }
+
+    public boolean isRemoteEventActive() {
+        return sp.getBoolean(KEY_EVENT_ACTIVE_REMOTE, true);
     }
 
     public void saveScreen(String screen) {

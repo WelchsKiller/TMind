@@ -2,21 +2,32 @@ package com.nest.tmind.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.ScrollView;
 import android.widget.Toast;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+
 import com.nest.tmind.R;
+import com.nest.tmind.api.ApiModels;
+import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.util.SessionManager;
 
-/** 최초 등록: 휴대폰 끝 8자리 + 이름·성별·나이 → 이후 자동 로그인 */
+/** 최초 등록: 휴대폰 8자리 + 이름·성별·나이 → 이후 자동 로그인 */
 public class LoginActivity extends BaseSeniorActivity {
 
     private SessionManager session;
     private EditText etPhone, etName, etAge;
     private RadioGroup rgGender;
     private RadioButton rbFemale, rbMale;
+    private ScrollView loginScroll;
+    private View btnStart;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,8 +37,10 @@ public class LoginActivity extends BaseSeniorActivity {
             goDashboard();
             return;
         }
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         setContentView(R.layout.activity_login);
 
+        loginScroll = findViewById(R.id.loginScroll);
         etPhone = findViewById(R.id.etPhone);
         etName = findViewById(R.id.etName);
         etAge = findViewById(R.id.etAge);
@@ -35,8 +48,10 @@ public class LoginActivity extends BaseSeniorActivity {
         rbFemale = findViewById(R.id.rbFemale);
         rbMale = findViewById(R.id.rbMale);
 
+        btnStart = findViewById(R.id.btnStart);
+        setupKeyboardScroll();
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvHint);
-        findViewById(R.id.btnStart).setOnClickListener(v -> confirm());
+        btnStart.setOnClickListener(v -> confirm());
 
         rbFemale.setOnCheckedChangeListener((b, checked) -> {
             if (checked) highlightGender();
@@ -45,6 +60,37 @@ public class LoginActivity extends BaseSeniorActivity {
             if (checked) highlightGender();
         });
         highlightGender();
+    }
+
+    private void setupKeyboardScroll() {
+        if (loginScroll == null) return;
+        ViewCompat.setOnApplyWindowInsetsListener(loginScroll, (v, insets) -> {
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), ime.bottom);
+            return insets;
+        });
+        View.OnFocusChangeListener scrollToField = (v, hasFocus) -> {
+            if (hasFocus) scrollToView(v);
+        };
+        etPhone.setOnFocusChangeListener(scrollToField);
+        etName.setOnFocusChangeListener(scrollToField);
+        etAge.setOnFocusChangeListener(scrollToField);
+        rgGender.setOnFocusChangeListener(scrollToField);
+        rbFemale.setOnClickListener(v -> scrollToView(rgGender));
+        rbMale.setOnClickListener(v -> scrollToView(rgGender));
+    }
+
+    private void scrollToView(View target) {
+        if (loginScroll == null || target == null) return;
+        loginScroll.post(() -> {
+            int y = target.getTop();
+            View parent = target.getParent() instanceof View ? (View) target.getParent() : null;
+            while (parent != null && parent != loginScroll.getChildAt(0)) {
+                y += parent.getTop();
+                parent = parent.getParent() instanceof View ? (View) parent.getParent() : null;
+            }
+            loginScroll.smoothScrollTo(0, Math.max(0, y - 24));
+        });
     }
 
     public static final String EXTRA_FORCE_REGISTER = "force_register";
@@ -93,10 +139,35 @@ public class LoginActivity extends BaseSeniorActivity {
             if (tts != null) tts.speak(getString(R.string.profile_need_age));
             return;
         }
+        final int finalAge = age;
         String gender = genderId == R.id.rbFemale ? "F" : "M";
-        session.setProfile(phone, name, gender, age);
-        session.saveScreen("dashboard");
-        goDashboard();
+        setLoading(true);
+        MemberApiManager.loginAndConsent(this, phone, new MemberApiManager.ResultCallback<ApiModels.TokenPair>() {
+            @Override
+            public void onSuccess(ApiModels.TokenPair data) {
+                runOnUiThread(() -> {
+                    setLoading(false);
+                    session.setProfile(phone, name, gender, finalAge);
+                    session.saveScreen("dashboard");
+                    goDashboard();
+                });
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    setLoading(false);
+                    Toast.makeText(LoginActivity.this, message, Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void setLoading(boolean loading) {
+        if (btnStart != null) {
+            btnStart.setEnabled(!loading);
+            btnStart.setAlpha(loading ? 0.6f : 1f);
+        }
     }
 
     private void goDashboard() {

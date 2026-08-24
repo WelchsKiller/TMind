@@ -6,7 +6,9 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import com.nest.tmind.R;
+import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.util.DataQueueManager;
+import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.MissionManager;
 
 import org.json.JSONObject;
@@ -15,6 +17,8 @@ import org.json.JSONObject;
 public class FeedbackActivity extends BaseSeniorActivity {
 
     public static final String EXTRA_CHOICE = "choice";
+    public static final String EXTRA_FROM_HRV = "from_hrv";
+    public static final String EXTRA_ADDITIONAL = "additional";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,6 +36,9 @@ public class FeedbackActivity extends BaseSeniorActivity {
             new DataQueueManager(this).flushIfOnline();
         } catch (Exception ignored) {
         }
+        MemberApiManager.submitFeedback(this,
+                getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false),
+                choice, "disagree".equalsIgnoreCase(choice) ? "MANUAL_EDIT" : null);
 
         if (new MissionManager(this).isAllDone()) {
             tvDone.setText(R.string.mission_complete);
@@ -48,11 +55,22 @@ public class FeedbackActivity extends BaseSeniorActivity {
 
         Button btnHome = findViewById(R.id.btnHome);
         btnHome.setBackgroundTintList(null);
-        btnHome.setOnClickListener(v -> {
-            Intent i = new Intent(this, DashboardActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        btnHome.setOnClickListener(v -> goHomeAfterFeedback());
+    }
+
+    private void goHomeAfterFeedback() {
+        boolean fromHrv = getIntent().getBooleanExtra(EXTRA_FROM_HRV, false);
+        boolean additional = getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false);
+        if (fromHrv && additional) {
+            Intent i = new Intent(this, EmaIntroActivity.class);
+            i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
+                    EmaQuestionBank.SessionType.EVENT.name());
             startActivity(i);
-            finish();
-        });
+        } else {
+            Intent i = new Intent(this, DashboardActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(i);
+        }
+        finish();
     }
 }

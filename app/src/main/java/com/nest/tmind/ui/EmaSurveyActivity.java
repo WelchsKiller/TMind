@@ -11,6 +11,8 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
 
 import com.nest.tmind.R;
+import com.nest.tmind.api.ApiModels;
+import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.util.DataQueueManager;
 import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.HistoryStore;
@@ -36,6 +38,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
 
     private int currentIndex = 0;
     private int[] answers;
+    private long[] remoteQuestionIds;
     private SessionManager session;
     private TextView tvQuestion, tvProgress;
     private ProgressBar progressBar;
@@ -111,6 +114,9 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         }
 
         showQuestion();
+        if (!feedbackReselect && !editMode) {
+            fetchRemoteQuestions();
+        }
     }
 
     private void confirmExit() {
@@ -270,6 +276,11 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             }
         } catch (Exception ignored) {
         }
+        if (!feedbackReselect && !editMode && remoteQuestionIds != null) {
+            MemberApiManager.submitEma(this,
+                    new MissionManager(this).isAdditionalMeasureMode(),
+                    MemberApiManager.buildEmaRequests(remoteQuestionIds, answers));
+        }
 
         if (feedbackReselect) {
             Intent i = new Intent(this, FeedbackActivity.class);
@@ -286,17 +297,6 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         MissionManager mission = new MissionManager(this);
         boolean additional = mission.isAdditionalMeasureMode();
 
-        // 수정 모드가 아니고 3미션 모두 완료 → 사분면 (완료 순서 무관)
-        if (!editMode && mission.isAllDone()) {
-            if (additional) {
-                mission.clearEventMissions();
-                mission.setAdditionalMeasureMode(false);
-            }
-            startActivity(new Intent(this, AnalysisResultActivity.class));
-            finish();
-            return;
-        }
-
         if (!editMode && additional) {
             startActivity(new Intent(this, VoiceDiaryActivity.class));
             finish();
@@ -310,5 +310,31 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(i);
         finish();
+    }
+
+    private void fetchRemoteQuestions() {
+        MemberApiManager.fetchEmaQuestions(this,
+                new MissionManager(this).isAdditionalMeasureMode(),
+                new MemberApiManager.ResultCallback<java.util.List<ApiModels.QuestionResponse>>() {
+                    @Override
+                    public void onSuccess(java.util.List<ApiModels.QuestionResponse> data) {
+                        if (data == null || data.isEmpty()) return;
+                        remoteQuestionIds = new long[Math.min(items.length, data.size())];
+                        for (int i = 0; i < remoteQuestionIds.length; i++) {
+                            ApiModels.QuestionResponse q = data.get(i);
+                            remoteQuestionIds[i] = q.questionId;
+                        }
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(() -> new AlertDialog.Builder(EmaSurveyActivity.this)
+                                .setTitle("오류")
+                                .setMessage(message)
+                                .setPositiveButton("확인", (d, w) -> finish())
+                                .setCancelable(false)
+                                .show());
+                    }
+                });
     }
 }

@@ -6,6 +6,7 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import com.nest.tmind.R;
+import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.RussellEmotionCalculator;
@@ -13,6 +14,9 @@ import com.nest.tmind.view.RussellCircumplexView;
 
 /** 분석 결과 — HRV 예측을 Russell 사분면으로 표시 (언어 라벨 없음) */
 public class AnalysisResultActivity extends BaseSeniorActivity {
+
+    public static final String EXTRA_FROM_HRV = "from_hrv";
+    public static final String EXTRA_ADDITIONAL = "additional";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,6 +55,10 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
                     ? LastEcgResult.measuredAtMs
                     : System.currentTimeMillis();
             HistoryStore.addAnalysis(this, "", bpm, hrv, at, point.valence, point.arousal);
+            MemberApiManager.savePrediction(this,
+                    getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false),
+                    point.valence, point.arousal,
+                    MemberApiManager.predictionText(point.valence, point.arousal));
         }
 
         findViewById(R.id.btnBack).setOnClickListener(v -> {
@@ -70,7 +78,13 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
 
         btnYes.setOnClickListener(v -> goFeedback("agree"));
         btnNo.setOnClickListener(v -> {
-            startActivity(new Intent(this, EmotionEditActivity.class));
+            Intent i = new Intent(this, EmotionEditActivity.class);
+            if (getIntent().getBooleanExtra(EXTRA_FROM_HRV, false)) {
+                i.putExtra(FeedbackActivity.EXTRA_FROM_HRV, true);
+                i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL,
+                        getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false));
+            }
+            startActivity(i);
             finish();
         });
         btnUnknown.setOnClickListener(v -> goFeedback("unknown"));
@@ -95,6 +109,11 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
     private void goFeedback(String choice) {
         Intent i = new Intent(this, FeedbackActivity.class);
         i.putExtra(FeedbackActivity.EXTRA_CHOICE, choice);
+        if (getIntent().getBooleanExtra(EXTRA_FROM_HRV, false)) {
+            i.putExtra(FeedbackActivity.EXTRA_FROM_HRV, true);
+            i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL,
+                    getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false));
+        }
         startActivity(i);
         finish();
     }

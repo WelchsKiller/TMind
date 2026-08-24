@@ -12,11 +12,11 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 
 import com.nest.tmind.R;
+import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.ecg.EcgConfig;
 import com.nest.tmind.ecg.EcgSurfaceView;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ecg.MeasureSessionStats;
-import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.util.RussellEmotionCalculator;
@@ -98,27 +98,31 @@ public class HrvResultActivity extends BaseSeniorActivity {
         try {
             MissionManager mission = new MissionManager(this);
             boolean additional = mission.isAdditionalMeasureMode();
-            mission.setHrvDone();
-            mission = new MissionManager(this);
+            MemberApiManager.ensureSessionStarted(this, additional,
+                    new MemberApiManager.ResultCallback<Long>() {
+                        @Override
+                        public void onSuccess(Long data) {
+                            runOnUiThread(() -> {
+                                mission.setHrvDone();
+                                MemberApiManager.uploadHrv(HrvResultActivity.this, additional,
+                                        LastEcgResult.measuredAtMs);
+                                Intent analysis = new Intent(HrvResultActivity.this, AnalysisResultActivity.class);
+                                analysis.putExtra(AnalysisResultActivity.EXTRA_FROM_HRV, true);
+                                analysis.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, additional);
+                                startActivity(analysis);
+                                finish();
+                            });
+                        }
 
-            // 순서 무관: 3미션 모두 완료되면 사분면 분석 화면
-            if (mission.isAllDone()) {
-                if (additional) {
-                    mission.clearEventMissions();
-                    mission.setAdditionalMeasureMode(false);
-                }
-                startActivity(new Intent(this, AnalysisResultActivity.class));
-            } else if (additional) {
-                Intent i = new Intent(this, EmaIntroActivity.class);
-                i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
-                        EmaQuestionBank.SessionType.EVENT.name());
-                startActivity(i);
-            } else {
-                Intent i = new Intent(this, DashboardActivity.class);
-                i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                startActivity(i);
-            }
-            finish();
+                        @Override
+                        public void onError(String message) {
+                            runOnUiThread(() -> {
+                                navigating = false;
+                                btnNext.setEnabled(true);
+                                Toast.makeText(HrvResultActivity.this, message, Toast.LENGTH_LONG).show();
+                            });
+                        }
+                    });
         } catch (Exception e) {
             Log.e(TAG, "confirm failed", e);
             navigating = false;

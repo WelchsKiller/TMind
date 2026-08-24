@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
 
 import com.nest.tmind.R;
+import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.util.DataQueueManager;
 import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.view.VoiceWaveformView;
@@ -167,25 +168,23 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
 
         MissionManager mission = new MissionManager(this);
         boolean additional = mission.isAdditionalMeasureMode();
+        if (!editMode) {
+            MemberApiManager.uploadVoiceDiary(this, additional, audioFile, elapsedSec);
+        }
         mission.setDiaryDone();
         // setDiaryDone 후 다시 로드 (추가 완료 카운트 반영)
         mission = new MissionManager(this);
 
-        if (!editMode && mission.isAllDone()) {
-            if (additional) {
-                mission.clearEventMissions();
-                mission.setAdditionalMeasureMode(false);
-            }
-            startActivity(new Intent(this, AnalysisResultActivity.class));
-        } else {
-            if (additional && mission.isSessionAllDone(MissionManager.Session.EVENT)) {
-                mission.clearEventMissions();
-                mission.setAdditionalMeasureMode(false);
-            }
-            Intent i = new Intent(this, DashboardActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(i);
+        if (!editMode && additional && mission.isSessionAllDone(MissionManager.Session.EVENT)) {
+            mission.clearEventMissions();
+            mission.setAdditionalMeasureMode(false);
+            MemberApiManager.clearCompletedSession(this, true);
+        } else if (!editMode && !additional) {
+            MemberApiManager.clearCompletedSession(this, false);
         }
+        Intent i = new Intent(this, DashboardActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(i);
         finish();
     }
 
