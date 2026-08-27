@@ -41,11 +41,13 @@ public class SessionManager {
         SharedPreferences.Editor ed = sp.edit()
                 .putBoolean(KEY_LOGGED_IN, true)
                 .putString(KEY_USER_PHONE, phoneTail8 != null ? phoneTail8 : "")
-                .putString(KEY_USER_NAME, userName)
-                .putString(KEY_USER_GENDER, gender)
+                .putString(KEY_USER_NAME, userName != null ? userName : "")
+                .putString(KEY_USER_GENDER, gender != null ? gender : "")
                 .putInt(KEY_USER_AGE, age);
-        // 새 참여자 등록 시 연구 일차를 새로 시작
-        ed.putLong(KEY_STUDY_START, System.currentTimeMillis());
+        // 최초 로그인 시에만 연구 시작일 기록
+        if (sp.getLong(KEY_STUDY_START, 0L) <= 0L) {
+            ed.putLong(KEY_STUDY_START, System.currentTimeMillis());
+        }
         ed.apply();
     }
 
@@ -112,10 +114,11 @@ public class SessionManager {
     }
 
     public void setTokens(String accessToken, String refreshToken) {
+        // commit: 저장 직후 바로 다른 API 호출에 쓰이도록 동기 반영
         sp.edit()
                 .putString(KEY_ACCESS_TOKEN, accessToken != null ? accessToken : "")
                 .putString(KEY_REFRESH_TOKEN, refreshToken != null ? refreshToken : "")
-                .apply();
+                .commit();
     }
 
     public String getAccessToken() {
@@ -126,15 +129,37 @@ public class SessionManager {
         return sp.getString(KEY_REFRESH_TOKEN, "");
     }
 
+    public boolean hasAccessToken() {
+        String t = getAccessToken();
+        return t != null && !t.isEmpty();
+    }
+
     public boolean hasRefreshToken() {
-        return getRefreshToken() != null && !getRefreshToken().isEmpty();
+        String t = getRefreshToken();
+        return t != null && !t.isEmpty();
+    }
+
+    /** 로그인 유지 여부: 로컬 플래그 + accessToken */
+    public boolean hasValidAuth() {
+        return isLoggedIn() && hasAccessToken();
     }
 
     public void clearTokens() {
         sp.edit()
                 .remove(KEY_ACCESS_TOKEN)
                 .remove(KEY_REFRESH_TOKEN)
-                .apply();
+                .commit();
+    }
+
+    /** 동의/인증 실패 시: 토큰·로그인 플래그 해제 후 키패드 로그인으로 */
+    public void clearAuthForRelogin() {
+        sp.edit()
+                .putBoolean(KEY_LOGGED_IN, false)
+                .remove(KEY_ACCESS_TOKEN)
+                .remove(KEY_REFRESH_TOKEN)
+                .remove(KEY_MAIN_SESSION_ID)
+                .remove(KEY_EVENT_SESSION_ID)
+                .commit();
     }
 
     public void setCurrentSessionId(boolean event, long sessionId) {

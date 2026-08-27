@@ -119,21 +119,10 @@ public class HrvResultActivity extends BaseSeniorActivity {
                             runOnUiThread(() -> {
                                 navigating = false;
                                 btnNext.setEnabled(true);
-                                final String msg = message != null ? message : "세션을 시작하지 못했습니다.";
-                                new AlertDialog.Builder(HrvResultActivity.this)
-                                        .setTitle("오류")
-                                        .setMessage(msg)
-                                        .setPositiveButton("확인", (d, w) -> {
-                                            if (msg.contains("로그인") || msg.contains("인증")) {
-                                                Intent i = new Intent(HrvResultActivity.this, LoginActivity.class);
-                                                i.putExtra(LoginActivity.EXTRA_FORCE_REGISTER, true);
-                                                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                                                        | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                                                startActivity(i);
-                                                finish();
-                                            }
-                                        })
-                                        .show();
+                                // 401/403 은 MemberApiManager.forceRelogin 이 이미 로그인 화면으로 이동
+                                Toast.makeText(HrvResultActivity.this,
+                                        message != null ? message : "세션을 시작하지 못했습니다.",
+                                        Toast.LENGTH_LONG).show();
                             });
                         }
                     });

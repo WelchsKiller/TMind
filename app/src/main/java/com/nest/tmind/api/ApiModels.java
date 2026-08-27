@@ -13,7 +13,9 @@ public final class ApiModels {
         public String message;
 
         public boolean isSuccess() {
-            return "S00000".equals(code) && data != null;
+            if (data == null) return false;
+            // 서버가 code 를 생략하거나 S00000 인 경우 모두 성공으로 처리
+            return code == null || code.isEmpty() || "S00000".equals(code);
         }
     }
 

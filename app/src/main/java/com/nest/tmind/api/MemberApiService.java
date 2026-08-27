@@ -17,16 +17,16 @@ import retrofit2.http.Query;
 public interface MemberApiService {
 
     @POST("/api/member/auth/login")
-    Call<ApiModels.ApiResponse<ApiModels.TokenPair>> login(@Body ApiModels.MemberLoginRequest request);
+    Call<ResponseBody> login(@Body ApiModels.MemberLoginRequest request);
 
     @POST("/api/member/auth/refresh")
-    Call<ApiModels.ApiResponse<ApiModels.TokenPair>> refresh(@Body ApiModels.RefreshRequest request);
+    Call<ResponseBody> refresh(@Body ApiModels.RefreshRequest request);
 
     @POST("/api/member/auth/logout")
     Call<ResponseBody> logout(@Body ApiModels.RefreshRequest request);
 
     @POST("/api/member/consent")
-    Call<ApiModels.ApiResponse<ApiModels.TokenPair>> consent();
+    Call<ResponseBody> consent();
 
     @GET("/api/member/today")
     Call<ApiModels.ApiResponse<ApiModels.TodayResponse>> getToday();

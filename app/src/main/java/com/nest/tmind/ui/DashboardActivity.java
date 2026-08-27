@@ -37,7 +37,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         session = new SessionManager(this);
-        if (!session.isLoggedIn()) {
+        if (!session.hasValidAuth()) {
             startActivity(new Intent(this, LoginActivity.class));
             finish();
             return;
@@ -61,7 +61,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         setupMissionCard(cardEma, R.drawable.ic_survey, R.string.mission_ema, R.string.mission_ema_sub);
         setupMissionCard(cardDiary, R.drawable.ic_diary, R.string.mission_diary, R.string.mission_diary_active);
 
-        tvGreeting.setText(getString(R.string.dashboard_greeting, session.getUserName()));
+        tvGreeting.setText(R.string.dashboard_greeting);
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvGreeting, R.id.tvProgress);
 
         cardHrv.setOnClickListener(v -> onHrvClick());
@@ -328,7 +328,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void syncServerState() {
-        if (!session.hasRefreshToken()) return;
+        if (!session.hasAccessToken()) return;
         MemberApiManager.fetchToday(this, new MemberApiManager.ResultCallback<ApiModels.TodayResponse>() {
             @Override
             public void onSuccess(ApiModels.TodayResponse data) {

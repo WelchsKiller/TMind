@@ -2,12 +2,14 @@ package com.nest.tmind.api;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
 import com.google.gson.Gson;
 import com.nest.tmind.ecg.LastEcgResult;
+import com.nest.tmind.ui.LoginActivity;
 import com.nest.tmind.util.SessionManager;
 
 import java.io.File;
@@ -42,47 +44,81 @@ public final class MemberApiManager {
 
     public static void loginAndConsent(Context context, String code, ResultCallback<ApiModels.TokenPair> callback) {
         MemberApiClient.service(context).login(new ApiModels.MemberLoginRequest(code))
-                .enqueue(new Callback<ApiModels.ApiResponse<ApiModels.TokenPair>>() {
+                .enqueue(new Callback<ResponseBody>() {
                     @Override
-                    public void onResponse(Call<ApiModels.ApiResponse<ApiModels.TokenPair>> call,
-                                           Response<ApiModels.ApiResponse<ApiModels.TokenPair>> response) {
-                        ApiModels.ApiResponse<ApiModels.TokenPair> body = response.body();
-                        ApiModels.TokenPair pair = unwrapToken(body);
-                        if (!response.isSuccessful() || pair == null
-                                || pair.accessToken == null || pair.accessToken.isEmpty()) {
-                            callback.onError(errorMessage(body, response.code(), "로그인에 실패했습니다."));
+                    public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                        ApiModels.TokenPair pair = parseTokenResponse(response);
+                        if (!response.isSuccessful() || pair == null) {
+                            callback.onError(httpErrorMessage(response, "로그인에 실패했습니다."));
                             return;
                         }
                         SessionManager session = new SessionManager(context);
                         session.setTokens(pair.accessToken, pair.refreshToken);
-                        MemberApiClient.service(context).consent()
-                                .enqueue(new Callback<ApiModels.ApiResponse<ApiModels.TokenPair>>() {
-                                    @Override
-                                    public void onResponse(Call<ApiModels.ApiResponse<ApiModels.TokenPair>> call2,
-                                                           Response<ApiModels.ApiResponse<ApiModels.TokenPair>> response2) {
-                                        ApiModels.TokenPair consented = unwrapToken(response2.body());
-                                        if (response2.isSuccessful() && consented != null
-                                                && consented.accessToken != null
-                                                && !consented.accessToken.isEmpty()) {
-                                            session.setTokens(consented.accessToken, consented.refreshToken);
-                                            callback.onSuccess(consented);
-                                            return;
-                                        }
-                                        // 동의 실패해도 로그인 토큰으로 진행 가능
-                                        callback.onSuccess(pair);
-                                    }
-
-                                    @Override
-                                    public void onFailure(Call<ApiModels.ApiResponse<ApiModels.TokenPair>> call2,
-                                                          Throwable t) {
-                                        callback.onSuccess(pair);
-                                    }
-                                });
+                        Log.i(TAG, "login ok, tokens saved");
+                        runConsentThenRefresh(context, session, callback);
                     }
 
                     @Override
-                    public void onFailure(Call<ApiModels.ApiResponse<ApiModels.TokenPair>> call, Throwable t) {
+                    public void onFailure(Call<ResponseBody> call, Throwable t) {
                         callback.onError("서버에 연결할 수 없습니다.");
+                    }
+                });
+    }
+
+    /** 연구 참여 동의 → (필요 시) refresh 로 CONSENTED 토큰 확보 */
+    private static void runConsentThenRefresh(Context context, SessionManager session,
+                                              ResultCallback<ApiModels.TokenPair> callback) {
+        MemberApiClient.service(context).consent().enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                ApiModels.TokenPair consented = parseTokenResponse(response);
+                if (response.isSuccessful() && consented != null) {
+                    session.setTokens(consented.accessToken, consented.refreshToken);
+                    Log.i(TAG, "consent ok, tokens updated");
+                    refreshTokens(context, session, consented, callback);
+                    return;
+                }
+                if (response.code() == 404) {
+                    callback.onError("진행 중인 연구 참여 회차가 없습니다. 관리자에게 문의해 주세요.");
+                    return;
+                }
+                callback.onError(httpErrorMessage(response,
+                        "참여 동의에 실패했습니다. 다시 로그인해 주세요."));
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                callback.onError("참여 동의 요청에 실패했습니다.");
+            }
+        });
+    }
+
+    private static void refreshTokens(Context context, SessionManager session,
+                                      ApiModels.TokenPair fallback,
+                                      ResultCallback<ApiModels.TokenPair> callback) {
+        String refresh = session.getRefreshToken();
+        if (refresh == null || refresh.isEmpty()) {
+            callback.onSuccess(fallback);
+            return;
+        }
+        MemberApiClient.service(context).refresh(new ApiModels.RefreshRequest(refresh))
+                .enqueue(new Callback<ResponseBody>() {
+                    @Override
+                    public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                        ApiModels.TokenPair refreshed = parseTokenResponse(response);
+                        if (response.isSuccessful() && refreshed != null) {
+                            session.setTokens(refreshed.accessToken, refreshed.refreshToken);
+                            Log.i(TAG, "refresh ok after consent");
+                            callback.onSuccess(refreshed);
+                            return;
+                        }
+                        // refresh 실패해도 consent 토큰으로 진행
+                        callback.onSuccess(fallback);
+                    }
+
+                    @Override
+                    public void onFailure(Call<ResponseBody> call, Throwable t) {
+                        callback.onSuccess(fallback);
                     }
                 });
     }
@@ -119,6 +155,9 @@ public final class MemberApiManager {
             @Override
             public void onResponse(Call<ApiModels.ApiResponse<ApiModels.TodayResponse>> call,
                                    Response<ApiModels.ApiResponse<ApiModels.TodayResponse>> response) {
+                if (handleAuthFailure(context, response.code(), response)) {
+                    return;
+                }
                 ApiModels.ApiResponse<ApiModels.TodayResponse> body = response.body();
                 if (!response.isSuccessful() || body == null || !body.isSuccess()) {
                     callback.onError(errorMessage(body, response.code(), "오늘 세션 정보를 불러오지 못했습니다."));
@@ -148,6 +187,9 @@ public final class MemberApiManager {
                     @Override
                     public void onResponse(Call<ApiModels.ApiResponse<ApiModels.ParticipationResponse>> call,
                                            Response<ApiModels.ApiResponse<ApiModels.ParticipationResponse>> response) {
+                        if (handleAuthFailure(context, response.code(), response)) {
+                            return;
+                        }
                         ApiModels.ApiResponse<ApiModels.ParticipationResponse> body = response.body();
                         if (!response.isSuccessful() || body == null || !body.isSuccess()) {
                             callback.onError(errorMessage(body, response.code(), "참여 현황을 불러오지 못했습니다."));
@@ -166,8 +208,8 @@ public final class MemberApiManager {
 
     public static void ensureSessionStarted(Context context, boolean event, ResultCallback<Long> callback) {
         SessionManager session = new SessionManager(context);
-        if (session.getAccessToken() == null || session.getAccessToken().isEmpty()) {
-            callback.onError("로그인이 필요합니다. 다시 로그인해 주세요.");
+        if (!session.hasAccessToken()) {
+            forceRelogin(context, "로그인이 필요합니다. 다시 로그인해 주세요.");
             return;
         }
         long cached = session.getCurrentSessionId(event);
@@ -181,12 +223,10 @@ public final class MemberApiManager {
                     @Override
                     public void onResponse(Call<ApiModels.ApiResponse<ApiModels.StartSessionData>> call,
                                            Response<ApiModels.ApiResponse<ApiModels.StartSessionData>> response) {
-                        ApiModels.ApiResponse<ApiModels.StartSessionData> body = response.body();
-                        if (response.code() == 401) {
-                            session.clearTokens();
-                            callback.onError("인증이 만료되었습니다. 다시 로그인해 주세요.");
+                        if (handleAuthFailure(context, response.code(), response)) {
                             return;
                         }
+                        ApiModels.ApiResponse<ApiModels.StartSessionData> body = response.body();
                         if (!response.isSuccessful() || body == null || !body.isSuccess()
                                 || body.data.sessionId <= 0) {
                             callback.onError(errorMessage(body, response.code(), "세션을 시작하지 못했습니다."));
@@ -289,6 +329,9 @@ public final class MemberApiManager {
                     @Override
                     public void onResponse(Call<ApiModels.ApiResponse<List<ApiModels.QuestionResponse>>> call,
                                            Response<ApiModels.ApiResponse<List<ApiModels.QuestionResponse>>> response) {
+                        if (handleAuthFailure(context, response.code(), response)) {
+                            return;
+                        }
                         ApiModels.ApiResponse<List<ApiModels.QuestionResponse>> body = response.body();
                         if (!response.isSuccessful() || body == null || !body.isSuccess()) {
                             callback.onError(errorMessage(body, response.code(), "문항을 불러오지 못했습니다."));
@@ -367,12 +410,123 @@ public final class MemberApiManager {
         );
     }
 
-    private static ApiModels.TokenPair unwrapToken(ApiModels.ApiResponse<ApiModels.TokenPair> body) {
-        if (body == null) return null;
-        if (body.isSuccess()) return body.data;
-        // 일부 환경에서 code 없이 data만 오는 경우 대비
-        if (body.data != null && body.data.accessToken != null && !body.data.accessToken.isEmpty()) {
-            return body.data;
+    /**
+     * 동의/인증 실패 시 자동 로그아웃 후 8자리 로그인 화면으로 이동.
+     * @return always true (호출부에서 early-return 용)
+     */
+    public static boolean forceRelogin(Context context, String message) {
+        SessionManager session = new SessionManager(context);
+        session.clearAuthForRelogin();
+        final String msg = (message == null || message.isEmpty())
+                ? "다시 로그인해 주세요."
+                : message;
+        Runnable go = () -> {
+            Toast.makeText(context.getApplicationContext(), msg, Toast.LENGTH_LONG).show();
+            Intent i = new Intent(context, LoginActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            context.startActivity(i);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            go.run();
+        } else {
+            new android.os.Handler(Looper.getMainLooper()).post(go);
+        }
+        return true;
+    }
+
+    private static boolean handleAuthFailure(Context context, int httpCode, Response<?> response) {
+        if (httpCode == 401) {
+            return forceRelogin(context, "인증이 만료되었습니다. 다시 로그인해 주세요.");
+        }
+        if (httpCode == 403) {
+            String detail = httpErrorMessage(response, "연구 참여 동의가 필요합니다.");
+            return forceRelogin(context, detail);
+        }
+        return false;
+    }
+
+    /** 로그인/동의/refresh 응답: 루트 TokenPair 또는 ApiResponse.data 모두 지원 */
+    public static ApiModels.TokenPair parseTokenResponse(Response<ResponseBody> response) {
+        if (response == null) return null;
+        try {
+            String raw = null;
+            if (response.body() != null) {
+                raw = response.body().string();
+            } else if (response.errorBody() != null) {
+                raw = response.errorBody().string();
+            }
+            return parseTokenJson(raw);
+        } catch (Exception e) {
+            Log.w(TAG, "parseTokenResponse failed", e);
+            return null;
+        }
+    }
+
+    private static ApiModels.TokenPair parseTokenJson(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return null;
+        try {
+            com.google.gson.JsonObject obj = GSON.fromJson(raw, com.google.gson.JsonObject.class);
+            if (obj == null) return null;
+            if (obj.has("accessToken")) {
+                return validToken(GSON.fromJson(obj, ApiModels.TokenPair.class));
+            }
+            if (obj.has("data") && obj.get("data").isJsonObject()) {
+                return validToken(GSON.fromJson(obj.getAsJsonObject("data"), ApiModels.TokenPair.class));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "parseTokenJson failed", e);
+        }
+        return null;
+    }
+
+    private static ApiModels.TokenPair validToken(ApiModels.TokenPair pair) {
+        if (pair == null) return null;
+        if (pair.accessToken == null || pair.accessToken.trim().isEmpty()) return null;
+        if (pair.refreshToken == null || pair.refreshToken.trim().isEmpty()) return null;
+        return pair;
+    }
+
+    private static String httpErrorMessage(Response<?> response, String fallback) {
+        if (response == null) return fallback;
+        try {
+            ResponseBody errBody = response.errorBody();
+            // 성공 응답인데 파싱 실패인 경우 body 를 이미 소비했을 수 있음
+            if (errBody != null) {
+                String raw = errBody.string();
+                String parsed = parseErrorRaw(raw);
+                if (parsed != null) return parsed;
+            }
+        } catch (Exception ignored) {
+        }
+        if (response.code() == 401) return "인증이 만료되었습니다. 다시 로그인해 주세요.";
+        if (response.code() == 403) return "권한이 없습니다. 다시 로그인해 주세요.";
+        if (response.code() == 404) return "요청한 정보를 찾을 수 없습니다.";
+        return fallback + " (HTTP " + response.code() + ")";
+    }
+
+    private static String parseErrorRaw(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        try {
+            ApiModels.ApiResponse<?> err = GSON.fromJson(raw, ApiModels.ApiResponse.class);
+            if (err != null && err.message != null && !err.message.isEmpty()) {
+                if (err.code != null && !err.code.isEmpty()) {
+                    return err.message + " (" + err.code + ")";
+                }
+                return err.message;
+            }
+            com.google.gson.JsonObject obj = GSON.fromJson(raw, com.google.gson.JsonObject.class);
+            if (obj != null && obj.has("message") && !obj.get("message").isJsonNull()) {
+                String msg = obj.get("message").getAsString();
+                if (obj.has("error") && !obj.get("error").isJsonNull()) {
+                    String errCode = obj.get("error").getAsString();
+                    if ("CONSENT_REQUIRED".equals(errCode)) {
+                        return "연구 참여 동의가 필요합니다. 다시 로그인해 주세요.";
+                    }
+                    return msg;
+                }
+                return msg;
+            }
+        } catch (Exception ignored) {
         }
         return null;
     }
@@ -396,6 +550,7 @@ public final class MemberApiManager {
             }
         }
         if (httpCode == 401) return "인증이 만료되었습니다. 다시 로그인해 주세요.";
+        if (httpCode == 403) return "연구 참여 동의가 필요합니다. 다시 로그인해 주세요.";
         if (httpCode > 0) return fallback + " (HTTP " + httpCode + ")";
         return fallback;
     }
@@ -444,6 +599,9 @@ public final class MemberApiManager {
         @Override
         public void onResponse(Call<ApiModels.ApiResponse<String>> call,
                                Response<ApiModels.ApiResponse<String>> response) {
+            if (handleAuthFailure(context, response.code(), response)) {
+                return;
+            }
             if (!response.isSuccessful()) {
                 Log.w(TAG, label + " failed: " + response.code());
                 if (context != null) {

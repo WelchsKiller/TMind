@@ -75,13 +75,11 @@ public final class MemberApiClient {
         if (refreshToken == null || refreshToken.isEmpty()) return null;
         try {
             MemberApiService plain = buildRetrofit(context, false).create(MemberApiService.class);
-            retrofit2.Response<ApiModels.ApiResponse<ApiModels.TokenPair>> refresh = plain
+            retrofit2.Response<okhttp3.ResponseBody> refresh = plain
                     .refresh(new ApiModels.RefreshRequest(refreshToken))
                     .execute();
-            ApiModels.ApiResponse<ApiModels.TokenPair> body = refresh.body();
-            ApiModels.TokenPair pair = (body != null && body.isSuccess()) ? body.data : null;
-            if (!refresh.isSuccessful() || pair == null
-                    || pair.accessToken == null || pair.accessToken.isEmpty()) {
+            ApiModels.TokenPair pair = MemberApiManager.parseTokenResponse(refresh);
+            if (!refresh.isSuccessful() || pair == null) {
                 session.clearTokens();
                 return null;
             }
