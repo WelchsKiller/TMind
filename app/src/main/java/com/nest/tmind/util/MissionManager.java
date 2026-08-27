@@ -128,19 +128,30 @@ public class MissionManager {
     }
 
     public void setHrvDone() {
-        sp.edit().putBoolean(k(getActiveSession(), "hrv"), true).commit();
+        setHrvDone(getActiveSession());
+    }
+
+    public void setHrvDone(Session s) {
+        sp.edit().putBoolean(k(s, "hrv"), true).commit();
         updateStarsAfterProgress();
     }
 
     public void setEmaDone() {
-        sp.edit().putBoolean(k(getActiveSession(), "ema"), true).commit();
+        setEmaDone(getActiveSession());
+    }
+
+    public void setEmaDone(Session s) {
+        sp.edit().putBoolean(k(s, "ema"), true).commit();
         updateStarsAfterProgress();
     }
 
     public void setDiaryDone() {
-        Session active = getActiveSession();
-        sp.edit().putBoolean(k(active, "diary"), true).commit();
-        if (active == Session.EVENT && isSessionAllDone(Session.EVENT)) {
+        setDiaryDone(getActiveSession());
+    }
+
+    public void setDiaryDone(Session s) {
+        sp.edit().putBoolean(k(s, "diary"), true).commit();
+        if (s == Session.EVENT && isSessionAllDone(Session.EVENT)) {
             recordAdditionalCompletion();
         }
         updateStarsAfterProgress();

@@ -19,6 +19,8 @@ public class FeedbackActivity extends BaseSeniorActivity {
     public static final String EXTRA_CHOICE = "choice";
     public static final String EXTRA_FROM_HRV = "from_hrv";
     public static final String EXTRA_ADDITIONAL = "additional";
+    public static final String EXTRA_CORRECTED_VALENCE = "corrected_valence";
+    public static final String EXTRA_CORRECTED_AROUSAL = "corrected_arousal";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,9 +38,17 @@ public class FeedbackActivity extends BaseSeniorActivity {
             new DataQueueManager(this).flushIfOnline();
         } catch (Exception ignored) {
         }
+
+        Float correctedV = null;
+        Float correctedA = null;
+        if (getIntent().hasExtra(EXTRA_CORRECTED_VALENCE)
+                && getIntent().hasExtra(EXTRA_CORRECTED_AROUSAL)) {
+            correctedV = getIntent().getFloatExtra(EXTRA_CORRECTED_VALENCE, 0f);
+            correctedA = getIntent().getFloatExtra(EXTRA_CORRECTED_AROUSAL, 0f);
+        }
         MemberApiManager.submitFeedback(this,
                 getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false),
-                choice, "disagree".equalsIgnoreCase(choice) ? "MANUAL_EDIT" : null);
+                choice, correctedV, correctedA);
 
         if (new MissionManager(this).isAllDone()) {
             tvDone.setText(R.string.mission_complete);

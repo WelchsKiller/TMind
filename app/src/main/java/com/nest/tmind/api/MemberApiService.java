@@ -17,16 +17,16 @@ import retrofit2.http.Query;
 public interface MemberApiService {
 
     @POST("/api/member/auth/login")
-    Call<ApiModels.TokenPair> login(@Body ApiModels.MemberLoginRequest request);
+    Call<ApiModels.ApiResponse<ApiModels.TokenPair>> login(@Body ApiModels.MemberLoginRequest request);
 
     @POST("/api/member/auth/refresh")
-    Call<ApiModels.TokenPair> refresh(@Body ApiModels.RefreshRequest request);
+    Call<ApiModels.ApiResponse<ApiModels.TokenPair>> refresh(@Body ApiModels.RefreshRequest request);
 
     @POST("/api/member/auth/logout")
     Call<ResponseBody> logout(@Body ApiModels.RefreshRequest request);
 
     @POST("/api/member/consent")
-    Call<ApiModels.TokenPair> consent();
+    Call<ApiModels.ApiResponse<ApiModels.TokenPair>> consent();
 
     @GET("/api/member/today")
     Call<ApiModels.ApiResponse<ApiModels.TodayResponse>> getToday();
@@ -42,7 +42,7 @@ public interface MemberApiService {
     @POST("/api/member/session/{sessionId}/hrv")
     Call<ApiModels.ApiResponse<String>> uploadHrv(
             @Path("sessionId") long sessionId,
-            @Query("measuredAt") String measuredAt,
+            @Part("data") RequestBody data,
             @Part MultipartBody.Part signal);
 
     @POST("/api/member/session/{sessionId}/hrv/skip")
@@ -74,6 +74,7 @@ public interface MemberApiService {
     Call<ApiModels.ApiResponse<String>> uploadVoiceDiary(
             @Path("sessionId") long sessionId,
             @Query("durationSec") int durationSec,
+            @Part("recordedAt") RequestBody recordedAt,
             @Part MultipartBody.Part audio);
 
     @PUT("/api/member/fcm-token")

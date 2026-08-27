@@ -20,7 +20,7 @@ import retrofit2.converter.gson.GsonConverterFactory;
 
 public final class MemberApiClient {
 
-    private static final String BASE_URL = "http://218.54.105.230/";
+    private static final String BASE_URL = "http://218.54.105.230:8080/";
     private static volatile MemberApiService cachedService;
 
     /** BASE_URL 변경 등 설정이 바뀐 경우 캐시를 초기화합니다. */
@@ -75,14 +75,16 @@ public final class MemberApiClient {
         if (refreshToken == null || refreshToken.isEmpty()) return null;
         try {
             MemberApiService plain = buildRetrofit(context, false).create(MemberApiService.class);
-            retrofit2.Response<ApiModels.TokenPair> refresh = plain
+            retrofit2.Response<ApiModels.ApiResponse<ApiModels.TokenPair>> refresh = plain
                     .refresh(new ApiModels.RefreshRequest(refreshToken))
                     .execute();
-            if (!refresh.isSuccessful() || refresh.body() == null) {
+            ApiModels.ApiResponse<ApiModels.TokenPair> body = refresh.body();
+            ApiModels.TokenPair pair = (body != null && body.isSuccess()) ? body.data : null;
+            if (!refresh.isSuccessful() || pair == null
+                    || pair.accessToken == null || pair.accessToken.isEmpty()) {
                 session.clearTokens();
                 return null;
             }
-            ApiModels.TokenPair pair = refresh.body();
             session.setTokens(pair.accessToken, pair.refreshToken);
             return response.request().newBuilder()
                     .header("Authorization", "Bearer " + pair.accessToken)

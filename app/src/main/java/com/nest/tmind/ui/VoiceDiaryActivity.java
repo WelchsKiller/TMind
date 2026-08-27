@@ -169,7 +169,8 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
         MissionManager mission = new MissionManager(this);
         boolean additional = mission.isAdditionalMeasureMode();
         if (!editMode) {
-            MemberApiManager.uploadVoiceDiary(this, additional, audioFile, elapsedSec);
+            MemberApiManager.uploadVoiceDiary(this, additional, audioFile, elapsedSec,
+                    System.currentTimeMillis());
         }
         mission.setDiaryDone();
         // setDiaryDone 후 다시 로드 (추가 완료 카운트 반영)

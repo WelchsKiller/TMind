@@ -27,9 +27,14 @@ public class SplashActivity extends BaseSeniorActivity {
         if (navigated || isFinishing()) return;
         navigated = true;
         SessionManager session = new SessionManager(this);
-        Intent next = session.isLoggedIn()
+        boolean canEnter = session.isLoggedIn() && session.hasRefreshToken();
+        Intent next = canEnter
                 ? new Intent(this, DashboardActivity.class)
                 : new Intent(this, LoginActivity.class);
+        if (session.isLoggedIn() && !session.hasRefreshToken()) {
+            // 예전 로컬 로그인만 남아 있는 경우 토큰 재발급 필요
+            session.clearTokens();
+        }
         startActivity(next);
         finish();
     }

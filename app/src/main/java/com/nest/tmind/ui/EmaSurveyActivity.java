@@ -277,14 +277,41 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         } catch (Exception ignored) {
         }
         if (!feedbackReselect && !editMode && remoteQuestionIds != null) {
+            float valence = 0f;
+            float arousal = 0f;
+            try {
+                java.util.HashMap<String, Integer> emoMap = new java.util.HashMap<>();
+                for (int i = 0; i < items.length; i++) {
+                    emoMap.put(items[i].key, answers[i]);
+                }
+                RussellEmotionCalculator.Point gt = RussellEmotionCalculator.fromEmaAnswers(emoMap);
+                if (gt != null) {
+                    valence = gt.valence;
+                    arousal = gt.arousal;
+                }
+            } catch (Exception ignored) {
+            }
             MemberApiManager.submitEma(this,
                     new MissionManager(this).isAdditionalMeasureMode(),
-                    MemberApiManager.buildEmaRequests(remoteQuestionIds, answers));
+                    MemberApiManager.buildEmaRequests(remoteQuestionIds, answers),
+                    valence, arousal);
         }
 
         if (feedbackReselect) {
             Intent i = new Intent(this, FeedbackActivity.class);
             i.putExtra(FeedbackActivity.EXTRA_CHOICE, "disagree");
+            try {
+                java.util.HashMap<String, Integer> emoMap = new java.util.HashMap<>();
+                for (int j = 0; j < items.length; j++) {
+                    emoMap.put(items[j].key, answers[j]);
+                }
+                RussellEmotionCalculator.Point gt = RussellEmotionCalculator.fromEmaAnswers(emoMap);
+                if (gt != null) {
+                    i.putExtra(FeedbackActivity.EXTRA_CORRECTED_VALENCE, gt.valence);
+                    i.putExtra(FeedbackActivity.EXTRA_CORRECTED_AROUSAL, gt.arousal);
+                }
+            } catch (Exception ignored) {
+            }
             startActivity(i);
             finish();
             return;

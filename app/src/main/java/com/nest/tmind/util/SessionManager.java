@@ -26,6 +26,8 @@ public class SessionManager {
     private static final String KEY_EVENT_SESSION_ID = "event_session_id";
     private static final String KEY_FCM_TOKEN = "fcm_token";
     private static final String KEY_EVENT_ACTIVE_REMOTE = "event_active_remote";
+    private static final String KEY_HRV_STATUS = "hrv_status_remote";
+    private static final String KEY_EVENT_GUIDE = "event_guide_text";
     /** 연구 참여 일수 (종료 후 7일 추이 제공) */
     public static final int STUDY_DAYS = 7;
 
@@ -168,6 +170,27 @@ public class SessionManager {
 
     public boolean isRemoteEventActive() {
         return sp.getBoolean(KEY_EVENT_ACTIVE_REMOTE, true);
+    }
+
+    /** VALID / SKIPPED / ""(미수행) */
+    public void setRemoteHrvStatus(String status) {
+        sp.edit().putString(KEY_HRV_STATUS, status != null ? status : "").apply();
+    }
+
+    public String getRemoteHrvStatus() {
+        return sp.getString(KEY_HRV_STATUS, "");
+    }
+
+    public boolean isRemoteHrvValid() {
+        return "VALID".equalsIgnoreCase(getRemoteHrvStatus());
+    }
+
+    public void setEventGuideText(String text) {
+        sp.edit().putString(KEY_EVENT_GUIDE, text != null ? text : "").apply();
+    }
+
+    public String getEventGuideText() {
+        return sp.getString(KEY_EVENT_GUIDE, "");
     }
 
     public void saveScreen(String screen) {

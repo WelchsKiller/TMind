@@ -60,6 +60,8 @@ public class EmotionEditActivity extends BaseSeniorActivity {
 
             Intent i = new Intent(this, FeedbackActivity.class);
             i.putExtra(FeedbackActivity.EXTRA_CHOICE, "disagree");
+            i.putExtra(FeedbackActivity.EXTRA_CORRECTED_VALENCE, valence);
+            i.putExtra(FeedbackActivity.EXTRA_CORRECTED_AROUSAL, arousal);
             if (getIntent().getBooleanExtra(FeedbackActivity.EXTRA_FROM_HRV, false)) {
                 i.putExtra(FeedbackActivity.EXTRA_FROM_HRV, true);
                 i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL,

@@ -170,7 +170,8 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void onHrvClick() {
         mission.setAdditionalMeasureMode(false);
-        if (mission.isHrvDone()) {
+        // hrvDone 이어도 hrvStatus 가 VALID 가 아니면 다시 측정 가능
+        if (mission.isHrvDone() && session.isRemoteHrvValid()) {
             Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
         } else {
             openHrv();
@@ -282,8 +283,13 @@ public class DashboardActivity extends BaseSeniorActivity {
         applyCardState(cardEma, mission.isEmaDone(active), R.drawable.bg_mission_card_ema);
         applyCardState(cardDiary, mission.isDiaryDone(active), R.drawable.bg_mission_card_diary);
 
-        // 완료 여부는 체크만 표시 — 부제목은 고정(일관)
-        ((TextView) cardHrv.findViewById(R.id.tvMissionSub)).setText(R.string.mission_hrv_sub);
+        // 완료 여부는 체크만 표시 — 부제목은 고정(일관). 다만 HRV 무효/건너뛰기면 재측정 안내
+        TextView hrvSub = cardHrv.findViewById(R.id.tvMissionSub);
+        if (mission.isHrvDone(active) && !session.isRemoteHrvValid()) {
+            hrvSub.setText("다시 측정해 주세요");
+        } else {
+            hrvSub.setText(R.string.mission_hrv_sub);
+        }
         ((TextView) cardEma.findViewById(R.id.tvMissionSub)).setText(R.string.mission_ema_sub);
         ((TextView) cardDiary.findViewById(R.id.tvMissionSub)).setText(R.string.mission_diary_active);
 
@@ -300,10 +306,15 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardAdditional.setEnabled(active);
         cardAdditional.setClickable(true);
         cardAdditional.setAlpha(active ? 1f : 0.45f);
+        String guide = session.getEventGuideText();
         if (!unlocked) {
             tvAdditionalSub.setText(R.string.additional_measure_locked);
+        } else if (!serverEventActive) {
+            tvAdditionalSub.setText("추가 측정은 현재 사용할 수 없습니다.");
         } else if (!canMore) {
             tvAdditionalSub.setText(R.string.additional_measure_max);
+        } else if (guide != null && !guide.trim().isEmpty()) {
+            tvAdditionalSub.setText(guide.trim());
         } else {
             int n = mission.getAdditionalCompleteCount();
             tvAdditionalSub.setText(getString(R.string.additional_measure_sub_count,
@@ -321,8 +332,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         MemberApiManager.fetchToday(this, new MemberApiManager.ResultCallback<ApiModels.TodayResponse>() {
             @Override
             public void onSuccess(ApiModels.TodayResponse data) {
-                serverEventActive = data == null || data.eventActive;
-                runOnUiThread(DashboardActivity.this::refreshAdditionalCard);
+                runOnUiThread(() -> applyTodayResponse(data));
             }
 
             @Override
@@ -347,6 +357,37 @@ public class DashboardActivity extends BaseSeniorActivity {
                         runOnUiThread(() -> btnWeeklyTrend.setVisibility(View.GONE));
                     }
                 });
+    }
+
+    private void applyTodayResponse(ApiModels.TodayResponse data) {
+        if (data == null) return;
+        serverEventActive = data.eventActive;
+        MissionManager.Session main = mapCurrentType(data.currentType);
+        if (Boolean.TRUE.equals(data.hrvDone)) {
+            mission.setHrvDone(main);
+        }
+        if (Boolean.TRUE.equals(data.emaDone)) {
+            mission.setEmaDone(main);
+        }
+        if (Boolean.TRUE.equals(data.diaryDone)) {
+            mission.setDiaryDone(main);
+        }
+        refreshUi();
+    }
+
+    private static MissionManager.Session mapCurrentType(String currentType) {
+        if (currentType == null) return MissionManager.mainSessionByHour();
+        switch (currentType.toUpperCase()) {
+            case "PM":
+            case "AFTERNOON":
+                return MissionManager.Session.AFTERNOON;
+            case "AM":
+            case "MORNING":
+                return MissionManager.Session.MORNING;
+            default:
+                // BASELINE / FOLLOWUP 등은 현재 시각 기준으로 표시
+                return MissionManager.mainSessionByHour();
+        }
     }
 
     private void renderStars() {

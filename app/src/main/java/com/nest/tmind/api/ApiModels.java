@@ -11,6 +11,10 @@ public final class ApiModels {
         public String code;
         public T data;
         public String message;
+
+        public boolean isSuccess() {
+            return "S00000".equals(code) && data != null;
+        }
     }
 
     public static final class TokenPair {
@@ -36,22 +40,36 @@ public final class ApiModels {
 
     public static final class StartSessionRequest {
         public final boolean isEvent;
+        /** epoch milliseconds */
+        public final long startedAt;
 
-        public StartSessionRequest(boolean isEvent) {
+        public StartSessionRequest(boolean isEvent, long startedAt) {
             this.isEvent = isEvent;
+            this.startedAt = startedAt;
         }
     }
 
     public static final class StartSessionData {
         public long sessionId;
+        public String hrvStatus;
+        public Boolean hrvDone;
+        public Boolean emaDone;
+        public Boolean diaryDone;
     }
 
     public static final class TodayResponse {
         public String currentType;
         public String missedType;
+        public Long currentSessionId;
+        public Boolean hrvDone;
+        public Boolean emaDone;
+        public Boolean diaryDone;
+        /** VALID / SKIPPED / null */
+        public String hrvStatus;
         public int totalCount;
         public int completedCount;
         public boolean eventActive;
+        public String eventGuideText;
     }
 
     public static final class ParticipationResponse {
@@ -98,6 +116,28 @@ public final class ApiModels {
         }
     }
 
+    /** HRV multipart 의 data 파트 JSON */
+    public static final class HrvUploadData {
+        public final long measuredAt;
+        public final boolean measurementValid;
+        public final int bpm;
+        public final int hrvMs;
+        public final int rrMs;
+        public final int stressScore;
+        public final int fs;
+
+        public HrvUploadData(long measuredAt, boolean measurementValid,
+                             int bpm, int hrvMs, int rrMs, int stressScore, int fs) {
+            this.measuredAt = measuredAt;
+            this.measurementValid = measurementValid;
+            this.bpm = bpm;
+            this.hrvMs = hrvMs;
+            this.rrMs = rrMs;
+            this.stressScore = stressScore;
+            this.fs = fs;
+        }
+    }
+
     public static final class SavePredictionRequest {
         public final float predictedValence;
         public final float predictedArousal;
@@ -113,18 +153,32 @@ public final class ApiModels {
     public static final class FeedbackRequest {
         public final String matchResult;
         public final String reasonCode;
+        public final Float correctedValence;
+        public final Float correctedArousal;
+        public final long occurredAt;
 
-        public FeedbackRequest(String matchResult, String reasonCode) {
+        public FeedbackRequest(String matchResult, String reasonCode,
+                               Float correctedValence, Float correctedArousal, long occurredAt) {
             this.matchResult = matchResult;
             this.reasonCode = reasonCode;
+            this.correctedValence = correctedValence;
+            this.correctedArousal = correctedArousal;
+            this.occurredAt = occurredAt;
         }
     }
 
     public static final class SubmitEmaListRequest {
         public final List<SubmitEmaRequest> responses;
+        public final float valence;
+        public final float arousal;
+        public final long submittedAt;
 
-        public SubmitEmaListRequest(List<SubmitEmaRequest> responses) {
+        public SubmitEmaListRequest(List<SubmitEmaRequest> responses,
+                                    float valence, float arousal, long submittedAt) {
             this.responses = responses;
+            this.valence = valence;
+            this.arousal = arousal;
+            this.submittedAt = submittedAt;
         }
     }
 

@@ -6,18 +6,15 @@ import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.google.gson.Gson;
 import com.nest.tmind.ecg.LastEcgResult;
-import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.util.SessionManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -30,6 +27,9 @@ import retrofit2.Response;
 public final class MemberApiManager {
 
     private static final String TAG = "MemberApiManager";
+    private static final Gson GSON = new Gson();
+    private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+    private static final MediaType TEXT_PLAIN = MediaType.parse("text/plain");
 
     private MemberApiManager() {
     }
@@ -42,38 +42,46 @@ public final class MemberApiManager {
 
     public static void loginAndConsent(Context context, String code, ResultCallback<ApiModels.TokenPair> callback) {
         MemberApiClient.service(context).login(new ApiModels.MemberLoginRequest(code))
-                .enqueue(new Callback<ApiModels.TokenPair>() {
+                .enqueue(new Callback<ApiModels.ApiResponse<ApiModels.TokenPair>>() {
                     @Override
-                    public void onResponse(Call<ApiModels.TokenPair> call, Response<ApiModels.TokenPair> response) {
-                        if (!response.isSuccessful() || response.body() == null) {
-                            callback.onError("로그인에 실패했습니다.");
+                    public void onResponse(Call<ApiModels.ApiResponse<ApiModels.TokenPair>> call,
+                                           Response<ApiModels.ApiResponse<ApiModels.TokenPair>> response) {
+                        ApiModels.ApiResponse<ApiModels.TokenPair> body = response.body();
+                        ApiModels.TokenPair pair = unwrapToken(body);
+                        if (!response.isSuccessful() || pair == null
+                                || pair.accessToken == null || pair.accessToken.isEmpty()) {
+                            callback.onError(errorMessage(body, response.code(), "로그인에 실패했습니다."));
                             return;
                         }
                         SessionManager session = new SessionManager(context);
-                        ApiModels.TokenPair pair = response.body();
                         session.setTokens(pair.accessToken, pair.refreshToken);
-                        MemberApiClient.service(context).consent().enqueue(new Callback<ApiModels.TokenPair>() {
-                            @Override
-                            public void onResponse(Call<ApiModels.TokenPair> call2,
-                                                   Response<ApiModels.TokenPair> response2) {
-                                if (response2.isSuccessful() && response2.body() != null) {
-                                    ApiModels.TokenPair consented = response2.body();
-                                    session.setTokens(consented.accessToken, consented.refreshToken);
-                                    callback.onSuccess(consented);
-                                    return;
-                                }
-                                callback.onSuccess(pair);
-                            }
+                        MemberApiClient.service(context).consent()
+                                .enqueue(new Callback<ApiModels.ApiResponse<ApiModels.TokenPair>>() {
+                                    @Override
+                                    public void onResponse(Call<ApiModels.ApiResponse<ApiModels.TokenPair>> call2,
+                                                           Response<ApiModels.ApiResponse<ApiModels.TokenPair>> response2) {
+                                        ApiModels.TokenPair consented = unwrapToken(response2.body());
+                                        if (response2.isSuccessful() && consented != null
+                                                && consented.accessToken != null
+                                                && !consented.accessToken.isEmpty()) {
+                                            session.setTokens(consented.accessToken, consented.refreshToken);
+                                            callback.onSuccess(consented);
+                                            return;
+                                        }
+                                        // 동의 실패해도 로그인 토큰으로 진행 가능
+                                        callback.onSuccess(pair);
+                                    }
 
-                            @Override
-                            public void onFailure(Call<ApiModels.TokenPair> call2, Throwable t) {
-                                callback.onSuccess(pair);
-                            }
-                        });
+                                    @Override
+                                    public void onFailure(Call<ApiModels.ApiResponse<ApiModels.TokenPair>> call2,
+                                                          Throwable t) {
+                                        callback.onSuccess(pair);
+                                    }
+                                });
                     }
 
                     @Override
-                    public void onFailure(Call<ApiModels.TokenPair> call, Throwable t) {
+                    public void onFailure(Call<ApiModels.ApiResponse<ApiModels.TokenPair>> call, Throwable t) {
                         callback.onError("서버에 연결할 수 없습니다.");
                     }
                 });
@@ -112,11 +120,17 @@ public final class MemberApiManager {
             public void onResponse(Call<ApiModels.ApiResponse<ApiModels.TodayResponse>> call,
                                    Response<ApiModels.ApiResponse<ApiModels.TodayResponse>> response) {
                 ApiModels.ApiResponse<ApiModels.TodayResponse> body = response.body();
-                if (!response.isSuccessful() || body == null || body.data == null) {
-                    callback.onError("오늘 세션 정보를 불러오지 못했습니다.");
+                if (!response.isSuccessful() || body == null || !body.isSuccess()) {
+                    callback.onError(errorMessage(body, response.code(), "오늘 세션 정보를 불러오지 못했습니다."));
                     return;
                 }
-                new SessionManager(context).setRemoteEventActive(body.data.eventActive);
+                SessionManager session = new SessionManager(context);
+                session.setRemoteEventActive(body.data.eventActive);
+                if (body.data.currentSessionId != null && body.data.currentSessionId > 0) {
+                    session.setCurrentSessionId(false, body.data.currentSessionId);
+                }
+                session.setRemoteHrvStatus(body.data.hrvStatus);
+                session.setEventGuideText(body.data.eventGuideText);
                 callback.onSuccess(body.data);
             }
 
@@ -135,8 +149,8 @@ public final class MemberApiManager {
                     public void onResponse(Call<ApiModels.ApiResponse<ApiModels.ParticipationResponse>> call,
                                            Response<ApiModels.ApiResponse<ApiModels.ParticipationResponse>> response) {
                         ApiModels.ApiResponse<ApiModels.ParticipationResponse> body = response.body();
-                        if (!response.isSuccessful() || body == null || body.data == null) {
-                            callback.onError("참여 현황을 불러오지 못했습니다.");
+                        if (!response.isSuccessful() || body == null || !body.isSuccess()) {
+                            callback.onError(errorMessage(body, response.code(), "참여 현황을 불러오지 못했습니다."));
                             return;
                         }
                         callback.onSuccess(body.data);
@@ -152,49 +166,80 @@ public final class MemberApiManager {
 
     public static void ensureSessionStarted(Context context, boolean event, ResultCallback<Long> callback) {
         SessionManager session = new SessionManager(context);
+        if (session.getAccessToken() == null || session.getAccessToken().isEmpty()) {
+            callback.onError("로그인이 필요합니다. 다시 로그인해 주세요.");
+            return;
+        }
         long cached = session.getCurrentSessionId(event);
         if (cached > 0) {
             callback.onSuccess(cached);
             return;
         }
-        MemberApiClient.service(context).startSession(new ApiModels.StartSessionRequest(event))
+        long startedAt = System.currentTimeMillis();
+        MemberApiClient.service(context).startSession(new ApiModels.StartSessionRequest(event, startedAt))
                 .enqueue(new Callback<ApiModels.ApiResponse<ApiModels.StartSessionData>>() {
                     @Override
                     public void onResponse(Call<ApiModels.ApiResponse<ApiModels.StartSessionData>> call,
                                            Response<ApiModels.ApiResponse<ApiModels.StartSessionData>> response) {
                         ApiModels.ApiResponse<ApiModels.StartSessionData> body = response.body();
-                        if (!response.isSuccessful() || body == null || body.data == null || body.data.sessionId <= 0) {
-                            callback.onError("세션을 시작하지 못했습니다.");
+                        if (response.code() == 401) {
+                            session.clearTokens();
+                            callback.onError("인증이 만료되었습니다. 다시 로그인해 주세요.");
+                            return;
+                        }
+                        if (!response.isSuccessful() || body == null || !body.isSuccess()
+                                || body.data.sessionId <= 0) {
+                            callback.onError(errorMessage(body, response.code(), "세션을 시작하지 못했습니다."));
                             return;
                         }
                         session.setCurrentSessionId(event, body.data.sessionId);
+                        if (body.data.hrvStatus != null) {
+                            session.setRemoteHrvStatus(body.data.hrvStatus);
+                        }
                         callback.onSuccess(body.data.sessionId);
                     }
 
                     @Override
                     public void onFailure(Call<ApiModels.ApiResponse<ApiModels.StartSessionData>> call, Throwable t) {
-                        callback.onError("세션을 시작하지 못했습니다.");
+                        callback.onError("세션을 시작하지 못했습니다. 네트워크를 확인해 주세요.");
                     }
                 });
     }
 
+    /** 유효 측정만 호출. measurementValid 는 항상 true. */
     public static void uploadHrv(Context context, boolean event, long measuredAtMs) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0) return;
         File signalFile = buildSignalFile(context);
-        if (signalFile == null) return;
-        RequestBody body = RequestBody.create(signalFile, MediaType.parse("text/csv"));
-        MultipartBody.Part part = MultipartBody.Part.createFormData("signal", signalFile.getName(), body);
-        String measuredAt = toIsoDateTime(measuredAtMs);
-        MemberApiClient.service(context).uploadHrv(sessionId, measuredAt, part)
+        if (signalFile == null) {
+            showToast(context, "ECG 신호 파일이 없어 HRV를 전송하지 못했습니다.");
+            return;
+        }
+        long at = measuredAtMs > 0 ? measuredAtMs : System.currentTimeMillis();
+        int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
+        ApiModels.HrvUploadData data = new ApiModels.HrvUploadData(
+                at,
+                true,
+                LastEcgResult.lastHrBpm,
+                LastEcgResult.lastHrvMs,
+                LastEcgResult.lastRrMs,
+                LastEcgResult.lastStressScore,
+                fs
+        );
+        RequestBody dataPart = RequestBody.create(GSON.toJson(data), JSON);
+        RequestBody fileBody = RequestBody.create(signalFile, MediaType.parse("text/csv"));
+        MultipartBody.Part signal = MultipartBody.Part.createFormData("signal", signalFile.getName(), fileBody);
+        MemberApiClient.service(context).uploadHrv(sessionId, dataPart, signal)
                 .enqueue(new LoggingCallback(context, "HRV 업로드"));
+        new SessionManager(context).setRemoteHrvStatus("VALID");
     }
 
     public static void skipHrv(Context context, boolean event, String reason) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0) return;
         MemberApiClient.service(context).skipHrv(sessionId, new ApiModels.SkipHrvRequest(reason))
-                .enqueue(new LoggingCallback("skipHrv"));
+                .enqueue(new LoggingCallback(context, "HRV 건너뛰기"));
+        new SessionManager(context).setRemoteHrvStatus("SKIPPED");
     }
 
     public static void savePrediction(Context context, boolean event,
@@ -206,11 +251,29 @@ public final class MemberApiManager {
                 .enqueue(new LoggingCallback(context, "예측 저장"));
     }
 
-    public static void submitFeedback(Context context, boolean event, String choice, String reasonCode) {
+    /**
+     * MATCH/UNKNOWN: 정정 좌표·사유 없이 전송.
+     * MISMATCH: correctedValence/Arousal 필수, reasonCode 선택.
+     */
+    public static void submitFeedback(Context context, boolean event, String choice,
+                                      Float correctedValence, Float correctedArousal) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0) return;
+        String match = matchResult(choice);
+        String reason = null;
+        Float cv = null;
+        Float ca = null;
+        if ("MISMATCH".equals(match)) {
+            if (correctedValence == null || correctedArousal == null) {
+                showToast(context, "다른 감정 위치를 선택한 뒤 다시 제출해 주세요.");
+                return;
+            }
+            cv = correctedValence;
+            ca = correctedArousal;
+            reason = "MANUAL_EDIT";
+        }
         MemberApiClient.service(context).submitFeedback(sessionId,
-                        new ApiModels.FeedbackRequest(matchResult(choice), reasonCode))
+                        new ApiModels.FeedbackRequest(match, reason, cv, ca, System.currentTimeMillis()))
                 .enqueue(new LoggingCallback(context, "피드백 제출"));
     }
 
@@ -227,8 +290,8 @@ public final class MemberApiManager {
                     public void onResponse(Call<ApiModels.ApiResponse<List<ApiModels.QuestionResponse>>> call,
                                            Response<ApiModels.ApiResponse<List<ApiModels.QuestionResponse>>> response) {
                         ApiModels.ApiResponse<List<ApiModels.QuestionResponse>> body = response.body();
-                        if (!response.isSuccessful() || body == null || body.data == null) {
-                            callback.onError("문항을 불러오지 못했습니다.");
+                        if (!response.isSuccessful() || body == null || !body.isSuccess()) {
+                            callback.onError(errorMessage(body, response.code(), "문항을 불러오지 못했습니다."));
                             return;
                         }
                         callback.onSuccess(body.data);
@@ -243,19 +306,25 @@ public final class MemberApiManager {
     }
 
     public static void submitEma(Context context, boolean event,
-                                 List<ApiModels.SubmitEmaRequest> responses) {
+                                 List<ApiModels.SubmitEmaRequest> responses,
+                                 float valence, float arousal) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0 || responses == null || responses.isEmpty()) return;
-        MemberApiClient.service(context).submitEma(sessionId, new ApiModels.SubmitEmaListRequest(responses))
+        MemberApiClient.service(context).submitEma(sessionId,
+                        new ApiModels.SubmitEmaListRequest(
+                                responses, valence, arousal, System.currentTimeMillis()))
                 .enqueue(new LoggingCallback(context, "설문 제출"));
     }
 
-    public static void uploadVoiceDiary(Context context, boolean event, File audioFile, int durationSec) {
+    public static void uploadVoiceDiary(Context context, boolean event, File audioFile,
+                                        int durationSec, long recordedAtMs) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0 || audioFile == null || !audioFile.exists()) return;
+        long at = recordedAtMs > 0 ? recordedAtMs : System.currentTimeMillis();
+        RequestBody recordedAt = RequestBody.create(String.valueOf(at), TEXT_PLAIN);
         RequestBody body = RequestBody.create(audioFile, MediaType.parse("audio/*"));
         MultipartBody.Part part = MultipartBody.Part.createFormData("audio", audioFile.getName(), body);
-        MemberApiClient.service(context).uploadVoiceDiary(sessionId, durationSec, part)
+        MemberApiClient.service(context).uploadVoiceDiary(sessionId, durationSec, recordedAt, part)
                 .enqueue(new LoggingCallback(context, "음성 일기 업로드"));
     }
 
@@ -279,10 +348,6 @@ public final class MemberApiManager {
         new SessionManager(context).clearCurrentSession(event);
     }
 
-    /**
-     * UI 스레드에 관계없이 안전하게 오류 다이얼로그를 표시합니다.
-     * 흐름이 막히는 치명적 오류(세션 시작 실패, 문항 로딩 실패 등)에 사용하세요.
-     */
     public static void showError(Context context, String message) {
         Runnable show = () -> new AlertDialog.Builder(context)
                 .setTitle("오류")
@@ -296,13 +361,20 @@ public final class MemberApiManager {
         }
     }
 
-    /**
-     * 백그라운드 전송 실패처럼 흐름을 막지 않는 오류에 사용하는 가벼운 Toast 알림입니다.
-     */
     public static void showToast(Context context, String message) {
         new android.os.Handler(Looper.getMainLooper()).post(
                 () -> Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         );
+    }
+
+    private static ApiModels.TokenPair unwrapToken(ApiModels.ApiResponse<ApiModels.TokenPair> body) {
+        if (body == null) return null;
+        if (body.isSuccess()) return body.data;
+        // 일부 환경에서 code 없이 data만 오는 경우 대비
+        if (body.data != null && body.data.accessToken != null && !body.data.accessToken.isEmpty()) {
+            return body.data;
+        }
+        return null;
     }
 
     private static String matchResult(String choice) {
@@ -311,8 +383,21 @@ public final class MemberApiManager {
         return "MISMATCH";
     }
 
-    private static String toIsoDateTime(long timeMs) {
-        return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.KOREA).format(new Date(timeMs));
+    private static String errorMessage(ApiModels.ApiResponse<?> body, int httpCode, String fallback) {
+        if (body != null) {
+            if (body.message != null && !body.message.isEmpty()) {
+                if (body.code != null && !body.code.isEmpty()) {
+                    return body.message + " (" + body.code + ")";
+                }
+                return body.message;
+            }
+            if (body.code != null && !body.code.isEmpty()) {
+                return fallback + " (" + body.code + ")";
+            }
+        }
+        if (httpCode == 401) return "인증이 만료되었습니다. 다시 로그인해 주세요.";
+        if (httpCode > 0) return fallback + " (HTTP " + httpCode + ")";
+        return fallback;
     }
 
     private static File buildSignalFile(Context context) {
@@ -350,11 +435,6 @@ public final class MemberApiManager {
     private static final class LoggingCallback implements Callback<ApiModels.ApiResponse<String>> {
         private final String label;
         private final Context context;
-
-        LoggingCallback(String label) {
-            this.label = label;
-            this.context = null;
-        }
 
         LoggingCallback(Context context, String label) {
             this.label = label;

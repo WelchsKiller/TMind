@@ -33,9 +33,13 @@ public class LoginActivity extends BaseSeniorActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         session = new SessionManager(this);
-        if (session.isLoggedIn() && !getIntent().getBooleanExtra(EXTRA_FORCE_REGISTER, false)) {
+        boolean forceRegister = getIntent().getBooleanExtra(EXTRA_FORCE_REGISTER, false);
+        if (session.isLoggedIn() && session.hasRefreshToken() && !forceRegister) {
             goDashboard();
             return;
+        }
+        if (forceRegister || (session.isLoggedIn() && !session.hasRefreshToken())) {
+            session.clearTokens();
         }
         WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         setContentView(R.layout.activity_login);
