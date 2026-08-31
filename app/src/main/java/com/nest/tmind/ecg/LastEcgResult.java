@@ -21,6 +21,8 @@ public class LastEcgResult {
 
     // ────────────── 마지막 측정 결과 (UI에서 바로 씀) ──────────────
     public static float[] lastSpike = null;  // 결과 화면 / 탭1에서 그리는 파형
+    /** 서버 업로드용 5분 원시 신호 (메모리만, prefs 미저장) */
+    public static float[] lastRawSignal = null;
     public static int lastFs = 0;            // 샘플링 레이트
     public static int lastHrBpm = 0;         // 마지막 BPM
     public static int lastHrvMs = 0;         // 마지막 HRV(ms)  ★모든 화면의 “ms”는 이 값 사용
@@ -60,6 +62,20 @@ public class LastEcgResult {
     // ────────────── 마지막 결과가 있는지 여부 ──────────────
     public static boolean hasValid() {
         return measuredAtMs > 0 && (lastFs > 0 || lastHrBpm > 0 || lastHrvMs > 0);
+    }
+
+    /** 서버 업로드용 원시 신호 (5분·250Hz 전체). prefs 에는 저장하지 않음. */
+    public static void setLastRawSignal(float[] raw) {
+        if (raw == null || raw.length == 0) {
+            lastRawSignal = null;
+            return;
+        }
+        lastRawSignal = new float[raw.length];
+        System.arraycopy(raw, 0, lastRawSignal, 0, raw.length);
+    }
+
+    public static boolean hasRawSignal() {
+        return lastRawSignal != null && lastRawSignal.length > 0;
     }
 
     // ────────────── SharedPreferences에서 마지막 결과 로드 ──────────────

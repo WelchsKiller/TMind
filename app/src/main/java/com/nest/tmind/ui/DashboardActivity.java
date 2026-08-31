@@ -32,6 +32,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     private ProgressBar progressBar;
     private View btnWeeklyTrend;
     private boolean serverEventActive = true;
+    private int serverParticipatedDays = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -146,8 +147,25 @@ public class DashboardActivity extends BaseSeniorActivity {
             Toast.makeText(this, R.string.additional_measure_max, Toast.LENGTH_SHORT).show();
             return;
         }
-        // 추가 측정: 심박변이도 → 마음상태 → 마음일기
         mission.setAdditionalMeasureMode(true);
+        MemberApiManager.ensureSessionStarted(this, true, new MemberApiManager.ResultCallback<Long>() {
+            @Override
+            public void onSuccess(Long data) {
+                runOnUiThread(() -> proceedAdditionalMeasure());
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    mission.setAdditionalMeasureMode(false);
+                    Toast.makeText(DashboardActivity.this, message, Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void proceedAdditionalMeasure() {
+        // 추가 측정: 심박변이도 → 마음상태 → 마음일기
         MissionManager.Session event = MissionManager.Session.EVENT;
         if (!mission.isHrvDone(event)) {
             openHrv();
@@ -156,7 +174,6 @@ public class DashboardActivity extends BaseSeniorActivity {
         } else if (!mission.isDiaryDone(event)) {
             openDiary();
         } else {
-            // 한 사이클 완료 후 다시 시작 (하루 최대 5회)
             mission.clearEventMissions();
             openHrv();
         }
@@ -181,27 +198,39 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void onEmaClick() {
         mission.setAdditionalMeasureMode(false);
         if (mission.isEmaDone()) {
-            showEditMissionDialog(this::openEmaForEdit);
-        } else {
-            openEma();
+            Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
+            return;
         }
+        if (!canOpenFollowUpMission()) {
+            Toast.makeText(this, R.string.mission_need_hrv_first, Toast.LENGTH_LONG).show();
+            return;
+        }
+        openEma();
     }
 
     private void onDiaryClick() {
         mission.setAdditionalMeasureMode(false);
         if (mission.isDiaryDone()) {
-            showEditMissionDialog(this::openDiaryForEdit);
-        } else {
-            openDiary();
+            Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
+            return;
         }
+        if (!canOpenFollowUpMission()) {
+            Toast.makeText(this, R.string.mission_need_hrv_first, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (!mission.isEmaDone()) {
+            Toast.makeText(this, R.string.mission_need_ema_first, Toast.LENGTH_LONG).show();
+            return;
+        }
+        openDiary();
     }
 
-    private void showEditMissionDialog(Runnable onEdit) {
-        new AlertDialog.Builder(this)
-                .setMessage(R.string.mission_edit_confirm)
-                .setPositiveButton(R.string.dialog_edit, (d, w) -> onEdit.run())
-                .setNegativeButton(R.string.dialog_cancel, null)
-                .show();
+    private boolean canOpenFollowUpMission() {
+        boolean event = mission.isAdditionalMeasureMode();
+        long sessionId = MemberApiManager.getCurrentSessionId(this, event);
+        if (sessionId <= 0) return false;
+        MissionManager.Session active = mission.getActiveSession();
+        return mission.isHrvDone(active) || session.isRemoteHrvDone();
     }
 
     private void openHrv() {
@@ -210,29 +239,8 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void openEma() {
         boolean event = mission.isAdditionalMeasureMode();
-        MemberApiManager.ensureSessionStarted(this, event, new MemberApiManager.ResultCallback<Long>() {
-            @Override
-            public void onSuccess(Long data) {
-                runOnUiThread(() -> {
-                    Intent i = new Intent(DashboardActivity.this, EmaIntroActivity.class);
-                    i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, mapEmaSession().name());
-                    startActivity(i);
-                });
-            }
-
-            @Override
-            public void onError(String message) {
-                runOnUiThread(() ->
-                        Toast.makeText(DashboardActivity.this, message, Toast.LENGTH_LONG).show());
-            }
-        });
-    }
-
-    private void openEmaForEdit() {
-        EmaQuestionBank.SessionType type = mapEmaSession();
-        Intent i = new Intent(this, EmaSurveyActivity.class);
-        i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, type.name());
-        i.putExtra(EmaSurveyActivity.EXTRA_EDIT_MODE, true);
+        Intent i = new Intent(this, EmaIntroActivity.class);
+        i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, mapEmaSession().name());
         startActivity(i);
     }
 
@@ -248,26 +256,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void openDiary() {
-        boolean event = mission.isAdditionalMeasureMode();
-        MemberApiManager.ensureSessionStarted(this, event, new MemberApiManager.ResultCallback<Long>() {
-            @Override
-            public void onSuccess(Long data) {
-                runOnUiThread(() ->
-                        startActivity(new Intent(DashboardActivity.this, VoiceDiaryActivity.class)));
-            }
-
-            @Override
-            public void onError(String message) {
-                runOnUiThread(() ->
-                        Toast.makeText(DashboardActivity.this, message, Toast.LENGTH_LONG).show());
-            }
-        });
-    }
-
-    private void openDiaryForEdit() {
-        Intent i = new Intent(this, VoiceDiaryActivity.class);
-        i.putExtra(VoiceDiaryActivity.EXTRA_EDIT_MODE, true);
-        startActivity(i);
+        startActivity(new Intent(this, VoiceDiaryActivity.class));
     }
 
     private void refreshUi() {
@@ -293,7 +282,8 @@ public class DashboardActivity extends BaseSeniorActivity {
         ((TextView) cardEma.findViewById(R.id.tvMissionSub)).setText(R.string.mission_ema_sub);
         ((TextView) cardDiary.findViewById(R.id.tvMissionSub)).setText(R.string.mission_diary_active);
 
-        btnWeeklyTrend.setVisibility(View.GONE);
+        btnWeeklyTrend.setVisibility(
+                serverParticipatedDays >= 7 ? View.VISIBLE : View.GONE);
 
         refreshAdditionalCard();
         renderStars();
@@ -346,8 +336,9 @@ public class DashboardActivity extends BaseSeniorActivity {
                     public void onSuccess(ApiModels.ParticipationResponse data) {
                         runOnUiThread(() -> {
                             if (data != null && data.period != null) {
+                                serverParticipatedDays = data.period.participatedDays;
                                 btnWeeklyTrend.setVisibility(
-                                        data.period.participatedDays >= 7 ? View.VISIBLE : View.GONE);
+                                        serverParticipatedDays >= 7 ? View.VISIBLE : View.GONE);
                             }
                         });
                     }
@@ -362,6 +353,9 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void applyTodayResponse(ApiModels.TodayResponse data) {
         if (data == null) return;
         serverEventActive = data.eventActive;
+        if (data.participatedDays != null) {
+            serverParticipatedDays = data.participatedDays;
+        }
         MissionManager.Session main = mapCurrentType(data.currentType);
         if (Boolean.TRUE.equals(data.hrvDone)) {
             mission.setHrvDone(main);
@@ -371,6 +365,11 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
         if (Boolean.TRUE.equals(data.diaryDone)) {
             mission.setDiaryDone(main);
+        }
+        if (data.missedType != null && !data.missedType.trim().isEmpty()) {
+            tvGreeting.setText(getString(R.string.dashboard_missed_session, data.missedType));
+        } else {
+            tvGreeting.setText(R.string.dashboard_greeting);
         }
         refreshUi();
     }

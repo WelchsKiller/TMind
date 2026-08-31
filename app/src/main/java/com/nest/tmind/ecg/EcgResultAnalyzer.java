@@ -41,6 +41,7 @@ public final class EcgResultAnalyzer {
                 + " stride=" + stride);
 
         float[] raw = EcgCapture.i().consumeAll();
+        LastEcgResult.setLastRawSignal(raw);
         boolean fromWave = false;
         float[] displayWave = null;
 

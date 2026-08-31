@@ -72,6 +72,12 @@ public final class ApiModels {
         public int completedCount;
         public boolean eventActive;
         public String eventGuideText;
+        /** 참여 기간 중 완료 세션이 있는 날 수 (서버 추가 예정) */
+        public Integer participatedDays;
+        /** 연구 N일차 (서버 추가 예정) */
+        public Integer studyDayIndex;
+        /** 서버 기준 오늘 날짜 yyyy-MM-dd (서버 추가 예정) */
+        public String serverDate;
     }
 
     public static final class ParticipationResponse {
@@ -127,9 +133,16 @@ public final class ApiModels {
         public final int rrMs;
         public final int stressScore;
         public final int fs;
+        /** Hybrid 암호화 시 서버 공개키 keyId */
+        public final String keyId;
 
         public HrvUploadData(long measuredAt, boolean measurementValid,
                              int bpm, int hrvMs, int rrMs, int stressScore, int fs) {
+            this(measuredAt, measurementValid, bpm, hrvMs, rrMs, stressScore, fs, null);
+        }
+
+        public HrvUploadData(long measuredAt, boolean measurementValid,
+                             int bpm, int hrvMs, int rrMs, int stressScore, int fs, String keyId) {
             this.measuredAt = measuredAt;
             this.measurementValid = measurementValid;
             this.bpm = bpm;
@@ -137,7 +150,14 @@ public final class ApiModels {
             this.rrMs = rrMs;
             this.stressScore = stressScore;
             this.fs = fs;
+            this.keyId = keyId;
         }
+    }
+
+    public static final class PublicKeyResponse {
+        public String keyId;
+        /** PEM 또는 Base64 DER */
+        public String publicKey;
     }
 
     public static final class SavePredictionRequest {

@@ -10,11 +10,14 @@ import android.widget.Toast;
 import com.google.gson.Gson;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ui.LoginActivity;
+import com.nest.tmind.util.EcgUploadCrypto;
 import com.nest.tmind.util.SessionManager;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -170,6 +173,7 @@ public final class MemberApiManager {
                 }
                 session.setRemoteHrvStatus(body.data.hrvStatus);
                 session.setEventGuideText(body.data.eventGuideText);
+                prefetchPublicKey(context);
                 callback.onSuccess(body.data);
             }
 
@@ -204,6 +208,34 @@ public final class MemberApiManager {
                         callback.onError("참여 현황을 불러오지 못했습니다.");
                     }
                 });
+    }
+
+    /** 서버 공개키 API — 실패 시 무시(평문 CSV 업로드 유지) */
+    public static void prefetchPublicKey(Context context) {
+        if (new SessionManager(context).hasCryptoPublicKey()) return;
+        MemberApiClient.service(context).getPublicKey()
+                .enqueue(new Callback<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>>() {
+                    @Override
+                    public void onResponse(Call<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>> call,
+                                           Response<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>> response) {
+                        if (!response.isSuccessful() || response.body() == null || !response.body().isSuccess()) {
+                            return;
+                        }
+                        ApiModels.PublicKeyResponse data = response.body().data;
+                        if (data == null || data.keyId == null || data.publicKey == null) return;
+                        new SessionManager(context).setCryptoPublicKey(data.keyId, data.publicKey);
+                    }
+
+                    @Override
+                    public void onFailure(Call<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>> call,
+                                          Throwable t) {
+                        Log.d(TAG, "public key prefetch skipped: " + t.getMessage());
+                    }
+                });
+    }
+
+    public static long getCurrentSessionId(Context context, boolean event) {
+        return new SessionManager(context).getCurrentSessionId(event);
     }
 
     public static void ensureSessionStarted(Context context, boolean event, ResultCallback<Long> callback) {
@@ -257,6 +289,29 @@ public final class MemberApiManager {
         }
         long at = measuredAtMs > 0 ? measuredAtMs : System.currentTimeMillis();
         int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
+        SessionManager session = new SessionManager(context);
+        String keyId = null;
+        RequestBody fileBody;
+        String uploadName;
+        try {
+            byte[] plain = readAllBytes(signalFile);
+            if (session.hasCryptoPublicKey()) {
+                PublicKey pk = EcgUploadCrypto.parseRsaPublicKey(session.getCryptoPublicKey());
+                EcgUploadCrypto.EncryptedPayload enc = EcgUploadCrypto.encrypt(
+                        plain, pk, session.getCryptoKeyId());
+                keyId = enc.keyId;
+                fileBody = RequestBody.create(EcgUploadCrypto.toJsonBytes(enc),
+                        MediaType.parse("application/json; charset=utf-8"));
+                uploadName = "ecg-encrypted.json";
+            } else {
+                fileBody = RequestBody.create(signalFile, MediaType.parse("text/csv"));
+                uploadName = signalFile.getName();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "encrypt signal failed, fallback plain CSV", e);
+            fileBody = RequestBody.create(signalFile, MediaType.parse("text/csv"));
+            uploadName = signalFile.getName();
+        }
         ApiModels.HrvUploadData data = new ApiModels.HrvUploadData(
                 at,
                 true,
@@ -264,14 +319,15 @@ public final class MemberApiManager {
                 LastEcgResult.lastHrvMs,
                 LastEcgResult.lastRrMs,
                 LastEcgResult.lastStressScore,
-                fs
+                fs,
+                keyId
         );
         RequestBody dataPart = RequestBody.create(GSON.toJson(data), JSON);
-        RequestBody fileBody = RequestBody.create(signalFile, MediaType.parse("text/csv"));
-        MultipartBody.Part signal = MultipartBody.Part.createFormData("signal", signalFile.getName(), fileBody);
+        MultipartBody.Part signal = MultipartBody.Part.createFormData(
+                "signal", uploadName, fileBody);
         MemberApiClient.service(context).uploadHrv(sessionId, dataPart, signal)
                 .enqueue(new LoggingCallback(context, "HRV 업로드"));
-        new SessionManager(context).setRemoteHrvStatus("VALID");
+        session.setRemoteHrvStatus("VALID");
     }
 
     public static void skipHrv(Context context, boolean event, String reason) {
@@ -365,7 +421,7 @@ public final class MemberApiManager {
         if (sessionId <= 0 || audioFile == null || !audioFile.exists()) return;
         long at = recordedAtMs > 0 ? recordedAtMs : System.currentTimeMillis();
         RequestBody recordedAt = RequestBody.create(String.valueOf(at), TEXT_PLAIN);
-        RequestBody body = RequestBody.create(audioFile, MediaType.parse("audio/*"));
+        RequestBody body = RequestBody.create(audioFile, MediaType.parse("audio/mp4"));
         MultipartBody.Part part = MultipartBody.Part.createFormData("audio", audioFile.getName(), body);
         MemberApiClient.service(context).uploadVoiceDiary(sessionId, durationSec, recordedAt, part)
                 .enqueue(new LoggingCallback(context, "음성 일기 업로드"));
@@ -555,13 +611,32 @@ public final class MemberApiManager {
         return fallback;
     }
 
+    private static byte[] readAllBytes(File file) throws Exception {
+        try (FileInputStream in = new FileInputStream(file)) {
+            byte[] buf = new byte[(int) file.length()];
+            int read = 0;
+            while (read < buf.length) {
+                int n = in.read(buf, read, buf.length - read);
+                if (n < 0) break;
+                read += n;
+            }
+            if (read == buf.length) return buf;
+            byte[] out = new byte[read];
+            System.arraycopy(buf, 0, out, 0, read);
+            return out;
+        }
+    }
+
     private static File buildSignalFile(Context context) {
         try {
-            float[] wave = LastEcgResult.lastSpike;
+            float[] wave = LastEcgResult.lastRawSignal;
+            if (wave == null || wave.length == 0) {
+                wave = LastEcgResult.lastSpike;
+            }
             if (wave == null || wave.length == 0) return null;
-            File out = new File(context.getCacheDir(), "last-hrv-signal.csv");
+            File out = new File(context.getCacheDir(), "ecg-raw-signal.csv");
             FileOutputStream fos = new FileOutputStream(out, false);
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = new StringBuilder(wave.length * 12);
             sb.append("index,value\n");
             for (int i = 0; i < wave.length; i++) {
                 sb.append(i).append(',').append(wave[i]).append('\n');

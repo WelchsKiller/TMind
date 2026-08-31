@@ -34,6 +34,9 @@ public interface MemberApiService {
     @GET("/api/member/participation")
     Call<ApiModels.ApiResponse<ApiModels.ParticipationResponse>> getParticipation();
 
+    @GET("/api/member/crypto/public-key")
+    Call<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>> getPublicKey();
+
     @POST("/api/member/session")
     Call<ApiModels.ApiResponse<ApiModels.StartSessionData>> startSession(
             @Body ApiModels.StartSessionRequest request);

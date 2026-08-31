@@ -28,6 +28,8 @@ public class SessionManager {
     private static final String KEY_EVENT_ACTIVE_REMOTE = "event_active_remote";
     private static final String KEY_HRV_STATUS = "hrv_status_remote";
     private static final String KEY_EVENT_GUIDE = "event_guide_text";
+    private static final String KEY_CRYPTO_KEY_ID = "crypto_key_id";
+    private static final String KEY_CRYPTO_PUBLIC_KEY = "crypto_public_key";
     /** 연구 참여 일수 (종료 후 7일 추이 제공) */
     public static final int STUDY_DAYS = 7;
 
@@ -208,6 +210,33 @@ public class SessionManager {
 
     public boolean isRemoteHrvValid() {
         return "VALID".equalsIgnoreCase(getRemoteHrvStatus());
+    }
+
+    public boolean isRemoteHrvSkipped() {
+        return "SKIPPED".equalsIgnoreCase(getRemoteHrvStatus());
+    }
+
+    public boolean isRemoteHrvDone() {
+        return isRemoteHrvValid() || isRemoteHrvSkipped();
+    }
+
+    public void setCryptoPublicKey(String keyId, String publicKey) {
+        sp.edit()
+                .putString(KEY_CRYPTO_KEY_ID, keyId != null ? keyId : "")
+                .putString(KEY_CRYPTO_PUBLIC_KEY, publicKey != null ? publicKey : "")
+                .apply();
+    }
+
+    public String getCryptoKeyId() {
+        return sp.getString(KEY_CRYPTO_KEY_ID, "");
+    }
+
+    public String getCryptoPublicKey() {
+        return sp.getString(KEY_CRYPTO_PUBLIC_KEY, "");
+    }
+
+    public boolean hasCryptoPublicKey() {
+        return !getCryptoKeyId().isEmpty() && !getCryptoPublicKey().isEmpty();
     }
 
     public void setEventGuideText(String text) {
