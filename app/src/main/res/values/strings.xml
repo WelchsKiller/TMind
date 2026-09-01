@@ -84,6 +84,12 @@
     <string name="hrv_guide_text">1. ECG 패치를 가슴에 부착해 주세요.\n\n2. 블루투스를 켜 주세요.\n   · 휴대폰 설정 → 블루투스 → 켜기\n   · 패치 전원이 켜져 있는지 확인\n   · 휴대폰과 패치가 가까이 있게 해주세요\n\n3. 편하게 앉아 5분간 가만히 계세요.\n\n4. 측정 중에는 말씀하지 마세요.</string>
     <string name="hrv_skip">건너뛰기</string>
     <string name="hrv_skip_confirm">심박변이도 측정 없이 마음상태 설문으로 넘어갑니다. 계속할까요?</string>
+    <string name="ema_questions_sync_failed">서버 문항 연동에 실패했습니다. 설문은 계속할 수 있으나 서버 전송은 되지 않을 수 있습니다.</string>
+    <string name="ema_questions_load_failed_title">설문 문항 불러오기</string>
+    <string name="ema_questions_load_failed">서버에서 설문 문항을 불러오지 못했습니다. HRV 측정(또는 건너뛰기)을 완료한 뒤 다시 시도해 주세요.</string>
+    <string name="ema_need_hrv_first">HRV 측정 또는 건너뛰기를 먼저 완료해 주세요.</string>
+    <string name="dialog_retry">다시 시도</string>
+    <string name="ema_submit_skipped_no_ids">서버 문항 ID가 없어 설문 결과를 서버에 보내지 못했습니다.</string>
     <string name="hrv_start">측정 시작</string>
     <string name="hrv_instruction">편하게 앉아 말씀하지 마시고\n잠시 기다려 주세요</string>
     <string name="time_remaining">남은 시간</string>

@@ -227,10 +227,12 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private boolean canOpenFollowUpMission() {
         boolean event = mission.isAdditionalMeasureMode();
+        MissionManager.Session s = event ? MissionManager.Session.EVENT : MissionManager.mainSessionByHour();
+        if (mission.isHrvDone(s)) {
+            return true;
+        }
         long sessionId = MemberApiManager.getCurrentSessionId(this, event);
-        if (sessionId <= 0) return false;
-        MissionManager.Session active = mission.getActiveSession();
-        return mission.isHrvDone(active) || session.isRemoteHrvDone();
+        return sessionId > 0 && session.isRemoteHrvDone();
     }
 
     private void openHrv() {

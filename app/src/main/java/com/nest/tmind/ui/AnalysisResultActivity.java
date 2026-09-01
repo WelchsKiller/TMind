@@ -57,8 +57,7 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
             HistoryStore.addAnalysis(this, "", bpm, hrv, at, point.valence, point.arousal);
             MemberApiManager.savePrediction(this,
                     getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false),
-                    point.valence, point.arousal,
-                    MemberApiManager.predictionText(point.valence, point.arousal));
+                    point.valence, point.arousal);
         }
 
         findViewById(R.id.btnBack).setOnClickListener(v -> {

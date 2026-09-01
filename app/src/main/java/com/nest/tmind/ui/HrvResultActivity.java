@@ -105,7 +105,19 @@ public class HrvResultActivity extends BaseSeniorActivity {
                             runOnUiThread(() -> {
                                 mission.setHrvDone();
                                 MemberApiManager.uploadHrv(HrvResultActivity.this, additional,
-                                        LastEcgResult.measuredAtMs);
+                                        LastEcgResult.measuredAtMs,
+                                        new MemberApiManager.ResultCallback<Void>() {
+                                            @Override
+                                            public void onSuccess(Void ignored) {
+                                            }
+
+                                            @Override
+                                            public void onError(String message) {
+                                                Toast.makeText(getApplicationContext(),
+                                                        "심박변이도 서버 저장 실패: " + message,
+                                                        Toast.LENGTH_LONG).show();
+                                            }
+                                        });
                                 Intent analysis = new Intent(HrvResultActivity.this, AnalysisResultActivity.class);
                                 analysis.putExtra(AnalysisResultActivity.EXTRA_FROM_HRV, true);
                                 analysis.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, additional);

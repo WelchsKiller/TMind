@@ -53,7 +53,8 @@ public final class MemberApiClient {
                 .writeTimeout(30, TimeUnit.SECONDS);
 
         HttpLoggingInterceptor logging = new HttpLoggingInterceptor();
-        logging.setLevel(HttpLoggingInterceptor.Level.BASIC);
+        // HEADERS: 요청 URL·쿼리·헤더까지 남김 (BODY는 ECG CSV 때문에 로그가 과도해짐)
+        logging.setLevel(HttpLoggingInterceptor.Level.HEADERS);
         client.addInterceptor(logging);
 
         if (withAuth) {

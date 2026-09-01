@@ -6,6 +6,7 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
@@ -28,6 +29,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     public static final String EXTRA_FEEDBACK_RESELECT = "feedback_reselect";
     public static final String EXTRA_SESSION_TYPE = "session_type";
     public static final String EXTRA_EDIT_MODE = "edit_mode";
+    public static final String EXTRA_REMOTE_QUESTIONS_JSON = "remote_questions_json";
 
     public static final String[] QUESTIONS = new String[9];
 
@@ -39,6 +41,9 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     private int currentIndex = 0;
     private int[] answers;
     private long[] remoteQuestionIds;
+    private String[] remotePrompts;
+    private String[][] remoteOptionLabels;
+    private int serverQuestionCount;
     private SessionManager session;
     private TextView tvQuestion, tvProgress;
     private ProgressBar progressBar;
@@ -66,13 +71,35 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             items = EmaQuestionBank.itemsFor(sessionType);
         }
 
-        answers = new int[items.length];
+        if (!feedbackReselect && !editMode) {
+            if (savedInstanceState != null) {
+                serverQuestionCount = savedInstanceState.getInt("serverQuestionCount", 0);
+                long[] restoredIds = savedInstanceState.getLongArray("remoteQuestionIds");
+                if (restoredIds != null && restoredIds.length > 0) {
+                    remoteQuestionIds = restoredIds;
+                }
+                remotePrompts = savedInstanceState.getStringArray("remotePrompts");
+            }
+            if (!hasRemoteQuestionIds()) {
+                java.util.List<ApiModels.QuestionResponse> remote = loadRemoteQuestions();
+                if (remote == null || remote.isEmpty()) {
+                    Toast.makeText(this, R.string.ema_questions_load_failed, Toast.LENGTH_LONG).show();
+                    finish();
+                    return;
+                }
+                applyRemoteQuestions(remote);
+            } else if (serverQuestionCount <= 0 && remoteQuestionIds != null) {
+                serverQuestionCount = remoteQuestionIds.length;
+            }
+        }
+
+        answers = new int[getQuestionCount()];
         if (editMode) {
             loadAnswersFromHistory();
             currentIndex = 0;
         } else if (!feedbackReselect) {
             // 같은 세션의 중간 저장만 복원 (오전→오후·추가 시 이전 답 유지 금지)
-            int[] saved = session.loadEmaAnswersForSession(sessionType.name(), items.length);
+            int[] saved = session.loadEmaAnswersForSession(sessionType.name(), getQuestionCount());
             boolean any = false;
             for (int a : saved) {
                 if (a > 0) {
@@ -82,7 +109,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             }
             if (any) {
                 answers = saved;
-                currentIndex = Math.min(session.getEmaIndex(), items.length - 1);
+                currentIndex = Math.min(session.getEmaIndex(), getQuestionCount() - 1);
             } else {
                 currentIndex = 0;
                 session.clearEmaProgress();
@@ -114,8 +141,57 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         }
 
         showQuestion();
-        if (!feedbackReselect && !editMode) {
-            fetchRemoteQuestions();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt("serverQuestionCount", serverQuestionCount);
+        outState.putLongArray("remoteQuestionIds", remoteQuestionIds);
+        outState.putStringArray("remotePrompts", remotePrompts);
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        serverQuestionCount = savedInstanceState.getInt("serverQuestionCount", serverQuestionCount);
+        long[] ids = savedInstanceState.getLongArray("remoteQuestionIds");
+        if (ids != null && ids.length > 0) {
+            remoteQuestionIds = ids;
+        }
+        String[] prompts = savedInstanceState.getStringArray("remotePrompts");
+        if (prompts != null && prompts.length > 0) {
+            remotePrompts = prompts;
+        }
+    }
+
+    private java.util.List<ApiModels.QuestionResponse> loadRemoteQuestions() {
+        String remoteJson = getIntent().getStringExtra(EXTRA_REMOTE_QUESTIONS_JSON);
+        java.util.List<ApiModels.QuestionResponse> remote =
+                MemberApiManager.decodeQuestions(remoteJson);
+        if (remote != null && !remote.isEmpty()) {
+            return remote;
+        }
+        return MemberApiManager.loadCachedEmaQuestions(this,
+                new MissionManager(this).isAdditionalMeasureMode());
+    }
+
+    private int getQuestionCount() {
+        return serverQuestionCount > 0 ? serverQuestionCount : items.length;
+    }
+
+    private void applyRemoteQuestions(java.util.List<ApiModels.QuestionResponse> data) {
+        serverQuestionCount = data.size();
+        remoteQuestionIds = new long[serverQuestionCount];
+        remotePrompts = new String[serverQuestionCount];
+        remoteOptionLabels = new String[serverQuestionCount][];
+        for (int i = 0; i < serverQuestionCount; i++) {
+            ApiModels.QuestionResponse q = data.get(i);
+            remoteQuestionIds[i] = MemberApiManager.resolveQuestionId(q);
+            remotePrompts[i] = q.text;
+            if (q.options != null && q.options.size() >= 5) {
+                remoteOptionLabels[i] = q.options.toArray(new String[0]);
+            }
         }
     }
 
@@ -175,14 +251,17 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     }
 
     private void bindOptionsForCurrent() {
-        EmaQuestionBank.Item item = items[currentIndex];
-        String[] labels = item.scaleLabels;
+        EmaQuestionBank.Item item = currentIndex < items.length ? items[currentIndex] : null;
+        String[] labels = remoteOptionLabels != null && currentIndex < remoteOptionLabels.length
+                && remoteOptionLabels[currentIndex] != null
+                ? remoteOptionLabels[currentIndex]
+                : (item != null ? item.scaleLabels : EmaQuestionBank.itemsFor(sessionType)[0].scaleLabels);
         for (int i = 0; i < optionViews.length; i++) {
             TextView label = optionViews[i].findViewById(R.id.optLabel);
             ImageView emoji = optionViews[i].findViewById(R.id.optEmoji);
             View radio = optionViews[i].findViewById(R.id.optRadio);
             if (label != null) label.setText(labels[i]);
-            if (emoji != null) {
+            if (emoji != null && item != null) {
                 emoji.setImageResource(EmaQuestionBank.drawableResFor(item, i));
                 emoji.setBackground(null);
             }
@@ -195,11 +274,15 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     private void showQuestion() {
         if (tts != null) tts.stop();
         bindOptionsForCurrent();
-        tvQuestion.setText(items[currentIndex].prompt);
-        tvProgress.setText((currentIndex + 1) + " / " + items.length);
-        progressBar.setMax(items.length);
+        String prompt = remotePrompts != null && currentIndex < remotePrompts.length
+                && remotePrompts[currentIndex] != null && !remotePrompts[currentIndex].isEmpty()
+                ? remotePrompts[currentIndex]
+                : items[Math.min(currentIndex, items.length - 1)].prompt;
+        tvQuestion.setText(prompt);
+        tvProgress.setText((currentIndex + 1) + " / " + getQuestionCount());
+        progressBar.setMax(getQuestionCount());
         progressBar.setProgress(currentIndex + 1);
-        setupTtsButton(R.id.btnTts, items[currentIndex].prompt);
+        setupTtsButton(R.id.btnTts, prompt);
         int selected = answers[currentIndex];
         int selectedDisplay = displayIndexFromScore(selected);
         for (int i = 0; i < optionViews.length; i++) {
@@ -245,7 +328,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         }
         // 다음으로 넘어갈 때 이전 문항 음성 중단
         if (tts != null) tts.stop();
-        if (currentIndex < items.length - 1) {
+        if (currentIndex < getQuestionCount() - 1) {
             currentIndex++;
             showQuestion();
         } else {
@@ -276,25 +359,8 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             }
         } catch (Exception ignored) {
         }
-        if (!feedbackReselect && !editMode && remoteQuestionIds != null) {
-            float valence = 0f;
-            float arousal = 0f;
-            try {
-                java.util.HashMap<String, Integer> emoMap = new java.util.HashMap<>();
-                for (int i = 0; i < items.length; i++) {
-                    emoMap.put(items[i].key, answers[i]);
-                }
-                RussellEmotionCalculator.Point gt = RussellEmotionCalculator.fromEmaAnswers(emoMap);
-                if (gt != null) {
-                    valence = gt.valence;
-                    arousal = gt.arousal;
-                }
-            } catch (Exception ignored) {
-            }
-            MemberApiManager.submitEma(this,
-                    new MissionManager(this).isAdditionalMeasureMode(),
-                    MemberApiManager.buildEmaRequests(remoteQuestionIds, answers),
-                    valence, arousal);
+        if (!feedbackReselect && !editMode) {
+            submitToServer();
         }
 
         if (feedbackReselect) {
@@ -332,36 +398,83 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         goDashboard();
     }
 
+    private void submitToServer() {
+        if (!hasRemoteQuestionIds()) {
+            java.util.List<ApiModels.QuestionResponse> cached = loadRemoteQuestions();
+            if (cached != null && !cached.isEmpty()) {
+                applyRemoteQuestions(cached);
+            }
+        }
+        if (hasRemoteQuestionIds()) {
+            sendEmaToServer();
+            return;
+        }
+        boolean event = new MissionManager(this).isAdditionalMeasureMode();
+        MemberApiManager.fetchEmaQuestions(this, event,
+                new MemberApiManager.ResultCallback<java.util.List<ApiModels.QuestionResponse>>() {
+                    @Override
+                    public void onSuccess(java.util.List<ApiModels.QuestionResponse> data) {
+                        runOnUiThread(() -> {
+                            applyRemoteQuestions(data);
+                            if (hasRemoteQuestionIds()) {
+                                sendEmaToServer();
+                            } else {
+                                Toast.makeText(EmaSurveyActivity.this,
+                                        R.string.ema_submit_skipped_no_ids, Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(() -> Toast.makeText(EmaSurveyActivity.this,
+                                message != null ? message
+                                        : getString(R.string.ema_submit_skipped_no_ids),
+                                Toast.LENGTH_LONG).show());
+                    }
+                });
+    }
+
+    private boolean hasRemoteQuestionIds() {
+        if (remoteQuestionIds == null || remoteQuestionIds.length == 0) return false;
+        for (long id : remoteQuestionIds) {
+            if (id > 0) return true;
+        }
+        return false;
+    }
+
+    private void sendEmaToServer() {
+        float valence = 0f;
+        float arousal = 0f;
+        RussellEmotionCalculator.Point gt = russellPointFromAnswers();
+        if (gt != null) {
+            valence = gt.valence;
+            arousal = gt.arousal;
+        }
+        MemberApiManager.submitEma(this,
+                new MissionManager(this).isAdditionalMeasureMode(),
+                MemberApiManager.buildEmaRequests(remoteQuestionIds, answers),
+                valence, arousal);
+    }
+
+    /** 로컬 문항 key 기준으로 러셀 좌표를 계산. 서버 문항 수가 달라도 겹치는 만큼만 사용. */
+    private RussellEmotionCalculator.Point russellPointFromAnswers() {
+        try {
+            java.util.HashMap<String, Integer> emoMap = new java.util.HashMap<>();
+            int n = Math.min(items.length, answers.length);
+            for (int i = 0; i < n; i++) {
+                emoMap.put(items[i].key, answers[i]);
+            }
+            return RussellEmotionCalculator.fromEmaAnswers(emoMap);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private void goDashboard() {
         Intent i = new Intent(this, DashboardActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(i);
         finish();
-    }
-
-    private void fetchRemoteQuestions() {
-        MemberApiManager.fetchEmaQuestions(this,
-                new MissionManager(this).isAdditionalMeasureMode(),
-                new MemberApiManager.ResultCallback<java.util.List<ApiModels.QuestionResponse>>() {
-                    @Override
-                    public void onSuccess(java.util.List<ApiModels.QuestionResponse> data) {
-                        if (data == null || data.isEmpty()) return;
-                        remoteQuestionIds = new long[Math.min(items.length, data.size())];
-                        for (int i = 0; i < remoteQuestionIds.length; i++) {
-                            ApiModels.QuestionResponse q = data.get(i);
-                            remoteQuestionIds[i] = q.questionId;
-                        }
-                    }
-
-                    @Override
-                    public void onError(String message) {
-                        runOnUiThread(() -> new AlertDialog.Builder(EmaSurveyActivity.this)
-                                .setTitle("오류")
-                                .setMessage(message)
-                                .setPositiveButton("확인", (d, w) -> finish())
-                                .setCancelable(false)
-                                .show());
-                    }
-                });
     }
 }

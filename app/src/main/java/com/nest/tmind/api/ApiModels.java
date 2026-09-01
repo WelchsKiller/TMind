@@ -1,5 +1,7 @@
 package com.nest.tmind.api;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.List;
 
 public final class ApiModels {
@@ -13,9 +15,10 @@ public final class ApiModels {
         public String message;
 
         public boolean isSuccess() {
-            if (data == null) return false;
-            // 서버가 code 를 생략하거나 S00000 인 경우 모두 성공으로 처리
-            return code == null || code.isEmpty() || "S00000".equals(code);
+            if (code == null || code.isEmpty()) {
+                return data != null;
+            }
+            return "S00000".equals(code);
         }
     }
 
@@ -40,7 +43,11 @@ public final class ApiModels {
         }
     }
 
+    /**
+     * Apidog 문서에는 isEvent 만 있으나 서버 검증은 startedAt 도 요구한다(누락 시 E00601).
+     */
     public static final class StartSessionRequest {
+        @SerializedName("isEvent")
         public final boolean isEvent;
         /** epoch milliseconds */
         public final long startedAt;
@@ -160,27 +167,63 @@ public final class ApiModels {
         public String publicKey;
     }
 
-    public static final class SavePredictionRequest {
-        public final float predictedValence;
-        public final float predictedArousal;
-        public final String predictedText;
+    /**
+     * HRV 업로드의 data 파트(application/json). signal 파트와 함께 multipart 로 보낸다.
+     * 지표는 모두 선택이고 서버는 범위를 검사하지 않는다. 유효 판정 주체는 앱이다.
+     */
+    public static final class HrvSaveRequest {
+        /** 필수. epoch milliseconds. 같은 값이면 재전송, 다르면 재측정으로 처리된다. */
+        public final long measuredAt;
+        public final Integer bpm;
+        public final Integer hrvMs;
+        public final Integer rrMs;
+        public final Integer stressScore;
+        public final Integer fs;
+        /** 유효 측정일 때만 전송 */
+        public final String abnormalityType;
+        /** 필수. false 면 서버가 예측을 받지 않고 세션을 보류로 닫는다. */
+        public final boolean measurementValid;
 
-        public SavePredictionRequest(float predictedValence, float predictedArousal, String predictedText) {
+        public HrvSaveRequest(long measuredAt, Integer bpm, Integer hrvMs, Integer rrMs,
+                              Integer stressScore, Integer fs, String abnormalityType,
+                              boolean measurementValid) {
+            this.measuredAt = measuredAt;
+            this.bpm = bpm;
+            this.hrvMs = hrvMs;
+            this.rrMs = rrMs;
+            this.stressScore = stressScore;
+            this.fs = fs;
+            this.abnormalityType = abnormalityType;
+            this.measurementValid = measurementValid;
+        }
+    }
+
+    /** 문서상 본문은 좌표 두 개뿐이다. 세션당 1회만 저장 가능하며 재저장은 409. */
+    public static final class SavePredictionRequest {
+        /** 필수. -1.2 ~ 1.2 */
+        public final float predictedValence;
+        /** 필수. -1.2 ~ 1.2 */
+        public final float predictedArousal;
+
+        public SavePredictionRequest(float predictedValence, float predictedArousal) {
             this.predictedValence = predictedValence;
             this.predictedArousal = predictedArousal;
-            this.predictedText = predictedText;
         }
     }
 
     public static final class FeedbackRequest {
         public final String matchResult;
+        /** 선택 필드 */
         public final String reasonCode;
-        public final Float correctedValence;
-        public final Float correctedArousal;
+        /** 필수. -1.2 ~ 1.2 */
+        public final float correctedValence;
+        /** 필수. -1.2 ~ 1.2 */
+        public final float correctedArousal;
+        /** 필수. epoch milliseconds */
         public final long occurredAt;
 
         public FeedbackRequest(String matchResult, String reasonCode,
-                               Float correctedValence, Float correctedArousal, long occurredAt) {
+                               float correctedValence, float correctedArousal, long occurredAt) {
             this.matchResult = matchResult;
             this.reasonCode = reasonCode;
             this.correctedValence = correctedValence;
@@ -191,8 +234,10 @@ public final class ApiModels {
 
     public static final class SubmitEmaListRequest {
         public final List<SubmitEmaRequest> responses;
+        /** 답변에서 계산한 러셀 좌표. 서버가 정답 라벨로 사용한다. */
         public final float valence;
         public final float arousal;
+        /** epoch milliseconds. 문서에는 없지만 서버 검증이 요구한다. */
         public final long submittedAt;
 
         public SubmitEmaListRequest(List<SubmitEmaRequest> responses,
@@ -216,6 +261,8 @@ public final class ApiModels {
 
     public static final class QuestionResponse {
         public long questionId;
+        /** 일부 서버 응답 호환 */
+        public long id;
         public int orderNo;
         public String text;
         public List<String> options;

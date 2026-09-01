@@ -71,10 +71,11 @@ public class FeedbackActivity extends BaseSeniorActivity {
     private void goHomeAfterFeedback() {
         boolean fromHrv = getIntent().getBooleanExtra(EXTRA_FROM_HRV, false);
         boolean additional = getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false);
-        if (fromHrv && additional) {
+        if (fromHrv) {
             Intent i = new Intent(this, EmaIntroActivity.class);
             i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
-                    EmaQuestionBank.SessionType.EVENT.name());
+                    additional ? EmaQuestionBank.SessionType.EVENT.name()
+                            : mapMainEmaSession().name());
             startActivity(i);
         } else {
             Intent i = new Intent(this, DashboardActivity.class);
@@ -82,5 +83,14 @@ public class FeedbackActivity extends BaseSeniorActivity {
             startActivity(i);
         }
         finish();
+    }
+
+    private EmaQuestionBank.SessionType mapMainEmaSession() {
+        switch (MissionManager.mainSessionByHour()) {
+            case AFTERNOON:
+                return EmaQuestionBank.SessionType.AFTERNOON;
+            default:
+                return EmaQuestionBank.SessionType.MORNING;
+        }
     }
 }

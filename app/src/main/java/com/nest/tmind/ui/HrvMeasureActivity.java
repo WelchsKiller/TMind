@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat;
 import com.nest.tmind.R;
 import com.nest.tmind.ecg.EcgBleService;
 import com.nest.tmind.ecg.EcgResultAnalyzer;
+import com.nest.tmind.ecg.EcgSampleGenerator;
 import com.nest.tmind.ecg.EcgSurfaceView;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ecg.MeasureSessionStats;
@@ -137,7 +138,12 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         resetMeasurementState();
     }
 
-    /** BLE 없이 임의 HR/HRV로 사분면 결과 화면 확인 */
+    /**
+     * BLE 없이 결과 화면·서버 전송을 확인하기 위한 경로.
+     * 지표를 직접 만들지 않고 5분·250Hz 합성 ECG 를 캡처 버퍼에 넣은 뒤
+     * 실측과 같은 분석기를 태운다. 그래야 서버로 올라가는 원본 신호와 지표가
+     * 실제 측정과 같은 형태가 된다.
+     */
     private void runTestQuadrant() {
         stopWaitBleReady();
         if (countdownRunnable != null) {
@@ -147,25 +153,20 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         stopBleCompletely();
 
         Random rnd = new Random();
-        int hr = 55 + rnd.nextInt(66);       // 55~120
-        int hrvMs = 25 + rnd.nextInt(126);   // 25~150
-        int hrvForScore = Math.max(20, Math.min(160, hrvMs));
-        int stress = Math.round(((160f - hrvForScore) / 140f) * 100f);
-        int rrMs = Math.round(60000f / Math.max(1, hr));
-        long now = System.currentTimeMillis();
+        int targetHr = 55 + rnd.nextInt(66);      // 55~120
+        int targetSdnn = 25 + rnd.nextInt(126);   // 25~150
 
-        // 간단한 가짜 스파이크 파형
-        float[] spike = new float[200];
-        for (int i = 0; i < spike.length; i++) {
-            float t = i / (float) spike.length;
-            spike[i] = (float) (Math.sin(t * Math.PI * 2) * 0.3
-                    + (t > 0.4 && t < 0.5 ? Math.sin((t - 0.4) / 0.1 * Math.PI) * 0.8 : 0));
+        MeasureSessionStats.reset();
+        EcgSampleGenerator.fillCapture(targetHr, targetSdnn);
+        EcgResultAnalyzer.Result r = EcgResultAnalyzer.analyze(this);
+        if (!r.valid) {
+            Toast.makeText(this, "샘플 신호 분석에 실패했습니다. 다시 시도해 주세요.",
+                    Toast.LENGTH_SHORT).show();
+            return;
         }
 
-        LastEcgResult.updateAndSave(this, spike, 250, hr, hrvMs, rrMs, stress, now);
-
         Toast.makeText(this,
-                "테스트 HR " + hr + " · HRV " + hrvMs + " ms · stress " + stress,
+                "샘플 HR " + r.hrBpm + " · HRV " + r.hrvMs + " ms · stress " + r.stressScore,
                 Toast.LENGTH_SHORT).show();
 
         // 테스트도 측정 결과 화면으로 (분석은 3미션 완료 후)

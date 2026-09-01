@@ -41,11 +41,12 @@ public interface MemberApiService {
     Call<ApiModels.ApiResponse<ApiModels.StartSessionData>> startSession(
             @Body ApiModels.StartSessionRequest request);
 
+    /** data(HRV 지표 JSON) + signal(ECG 원본) 두 파트를 한 요청으로 보낸다. */
     @Multipart
     @POST("/api/member/session/{sessionId}/hrv")
     Call<ApiModels.ApiResponse<String>> uploadHrv(
             @Path("sessionId") long sessionId,
-            @Part("data") RequestBody data,
+            @Part MultipartBody.Part data,
             @Part MultipartBody.Part signal);
 
     @POST("/api/member/session/{sessionId}/hrv/skip")
@@ -72,12 +73,13 @@ public interface MemberApiService {
             @Path("sessionId") long sessionId,
             @Body ApiModels.SubmitEmaListRequest request);
 
+    /** durationSec(0 초과, 200 이하)·recordedAt(epoch ms) 은 query, audio 만 multipart */
     @Multipart
     @POST("/api/member/session/{sessionId}/voice-diary")
     Call<ApiModels.ApiResponse<String>> uploadVoiceDiary(
             @Path("sessionId") long sessionId,
             @Query("durationSec") int durationSec,
-            @Part("recordedAt") RequestBody recordedAt,
+            @Query("recordedAt") long recordedAt,
             @Part MultipartBody.Part audio);
 
     @PUT("/api/member/fcm-token")

@@ -39,6 +39,8 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
     private boolean recording;
     private boolean editMode;
     private int elapsedSec;
+    /** 실제 녹음 시작 시각. 서버 수신 시각과 구분해 보내야 한다. */
+    private long recordedAtMs;
     private TextView tvTimer, tvStatus;
     private VoiceWaveformView waveformView;
     private ImageButton btnRecord;
@@ -131,6 +133,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
             recorder.start();
             recording = true;
             elapsedSec = 0;
+            recordedAtMs = System.currentTimeMillis();
             tvStatus.setText(R.string.recording_status);
             btnRecord.setImageResource(R.drawable.ic_stop);
             handler.post(waveRunnable);
@@ -169,8 +172,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
         MissionManager mission = new MissionManager(this);
         boolean additional = mission.isAdditionalMeasureMode();
         if (!editMode) {
-            MemberApiManager.uploadVoiceDiary(this, additional, audioFile, elapsedSec,
-                    System.currentTimeMillis());
+            MemberApiManager.uploadVoiceDiary(this, additional, audioFile, elapsedSec, recordedAtMs);
         }
         mission.setDiaryDone();
         // setDiaryDone 후 다시 로드 (추가 완료 카운트 반영)

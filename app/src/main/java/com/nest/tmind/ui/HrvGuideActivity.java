@@ -16,6 +16,7 @@ import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.ecg.EcgConfig;
 import com.nest.tmind.util.BlePermissionHelper;
 import com.nest.tmind.util.MissionManager;
+import com.nest.tmind.util.SessionManager;
 
 /** HRV 측정 안내 (패치 부착 설명 + BLE 권한/연결 준비) */
 public class HrvGuideActivity extends BaseSeniorActivity {
@@ -63,16 +64,27 @@ public class HrvGuideActivity extends BaseSeniorActivity {
         MemberApiManager.ensureSessionStarted(this, event, new MemberApiManager.ResultCallback<Long>() {
             @Override
             public void onSuccess(Long data) {
-                runOnUiThread(() -> {
-                    MemberApiManager.skipHrv(HrvGuideActivity.this, event, SKIP_REASON);
-                    mission.setHrvDone();
-                    Intent i = new Intent(HrvGuideActivity.this, EmaIntroActivity.class);
-                    i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
-                            event ? com.nest.tmind.util.EmaQuestionBank.SessionType.EVENT.name()
-                                    : mapMainEmaSession().name());
-                    startActivity(i);
-                    finish();
-                });
+                runOnUiThread(() ->
+                        MemberApiManager.skipHrv(HrvGuideActivity.this, event, SKIP_REASON,
+                                new MemberApiManager.ResultCallback<Void>() {
+                                    @Override
+                                    public void onSuccess(Void ignored) {
+                                        SessionManager sm = new SessionManager(HrvGuideActivity.this);
+                                        sm.setRemoteHrvStatus("SKIPPED");
+                                        mission.setHrvDone();
+                                        Intent i = new Intent(HrvGuideActivity.this, EmaIntroActivity.class);
+                                        i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
+                                                event ? com.nest.tmind.util.EmaQuestionBank.SessionType.EVENT.name()
+                                                        : mapMainEmaSession().name());
+                                        startActivity(i);
+                                        finish();
+                                    }
+
+                                    @Override
+                                    public void onError(String message) {
+                                        Toast.makeText(HrvGuideActivity.this, message, Toast.LENGTH_LONG).show();
+                                    }
+                                }));
             }
 
             @Override

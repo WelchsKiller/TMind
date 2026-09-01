@@ -30,6 +30,65 @@ public class SessionManager {
     private static final String KEY_EVENT_GUIDE = "event_guide_text";
     private static final String KEY_CRYPTO_KEY_ID = "crypto_key_id";
     private static final String KEY_CRYPTO_PUBLIC_KEY = "crypto_public_key";
+    private static final String KEY_CRYPTO_PREFETCH_BLOCKED_UNTIL = "crypto_prefetch_blocked_until";
+    private static final String KEY_SERVER_TODAY_SESSION_ID = "server_today_session_id";
+    private static final String KEY_EMA_Q_CACHE_JSON = "ema_questions_cache_json";
+    private static final String KEY_EMA_Q_CACHE_SID = "ema_questions_cache_session_id";
+    /** 피드백은 예측이 먼저 저장된 세션에서만 받아준다(E00702). */
+    public void setPredictionSaved(long sessionId) {
+        sp.edit().putLong("prediction_saved_session_id", sessionId).apply();
+    }
+
+    public boolean isPredictionSaved(long sessionId) {
+        return sessionId > 0 && sp.getLong("prediction_saved_session_id", 0L) == sessionId;
+    }
+
+    /** 피드백의 correctedValence/Arousal 은 필수라, MATCH/UNKNOWN 이면 예측값을 그대로 보낸다. */
+    public void setLastPrediction(float valence, float arousal) {
+        sp.edit()
+                .putFloat("last_prediction_valence", valence)
+                .putFloat("last_prediction_arousal", arousal)
+                .apply();
+    }
+
+    public float getLastPredictionValence() {
+        return sp.getFloat("last_prediction_valence", 0f);
+    }
+
+    public float getLastPredictionArousal() {
+        return sp.getFloat("last_prediction_arousal", 0f);
+    }
+
+    /** /today 가 알려준 진행 중 세션 ID. POST /session 실패 시 폴백으로만 사용. */
+    public void setServerTodaySessionId(long sessionId) {
+        sp.edit().putLong(KEY_SERVER_TODAY_SESSION_ID, Math.max(0L, sessionId)).apply();
+    }
+
+    public long getServerTodaySessionId() {
+        return sp.getLong(KEY_SERVER_TODAY_SESSION_ID, 0L);
+    }
+
+    public void clearEmaQuestionsCache() {
+        sp.edit()
+                .remove(KEY_EMA_Q_CACHE_JSON)
+                .remove(KEY_EMA_Q_CACHE_SID)
+                .apply();
+    }
+
+    public void setEmaQuestionsCache(long sessionId, String json) {
+        if (sessionId <= 0 || json == null || json.isEmpty()) return;
+        sp.edit()
+                .putLong(KEY_EMA_Q_CACHE_SID, sessionId)
+                .putString(KEY_EMA_Q_CACHE_JSON, json)
+                .apply();
+    }
+
+    public String getEmaQuestionsCache(long sessionId) {
+        if (sessionId <= 0) return null;
+        if (sp.getLong(KEY_EMA_Q_CACHE_SID, 0L) != sessionId) return null;
+        return sp.getString(KEY_EMA_Q_CACHE_JSON, null);
+    }
+
     /** 연구 참여 일수 (종료 후 7일 추이 제공) */
     public static final int STUDY_DAYS = 7;
 
@@ -174,6 +233,7 @@ public class SessionManager {
 
     public void clearCurrentSession(boolean event) {
         sp.edit().remove(event ? KEY_EVENT_SESSION_ID : KEY_MAIN_SESSION_ID).apply();
+        clearEmaQuestionsCache();
     }
 
     public void clearAllCurrentSessions() {
@@ -237,6 +297,19 @@ public class SessionManager {
 
     public boolean hasCryptoPublicKey() {
         return !getCryptoKeyId().isEmpty() && !getCryptoPublicKey().isEmpty();
+    }
+
+    public void blockCryptoPrefetchUntil(long epochMs) {
+        sp.edit().putLong(KEY_CRYPTO_PREFETCH_BLOCKED_UNTIL, epochMs).apply();
+    }
+
+    public void clearCryptoPrefetchBlock() {
+        sp.edit().remove(KEY_CRYPTO_PREFETCH_BLOCKED_UNTIL).apply();
+    }
+
+    public boolean isCryptoPrefetchBlocked() {
+        long until = sp.getLong(KEY_CRYPTO_PREFETCH_BLOCKED_UNTIL, 0L);
+        return until > System.currentTimeMillis();
     }
 
     public void setEventGuideText(String text) {
