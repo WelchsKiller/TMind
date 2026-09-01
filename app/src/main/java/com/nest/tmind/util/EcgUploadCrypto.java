@@ -60,7 +60,10 @@ public final class EcgUploadCrypto {
         String normalized = pemOrBase64.trim()
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
-                .replaceAll("\\s", "");
+                .replaceAll("\\s", "")
+                // 표준 Base64 에는 '-','_' 가 없어서 URL-safe 로 내려와도 안전하게 되돌린다.
+                .replace('-', '+')
+                .replace('_', '/');
         byte[] der = Base64.decode(normalized, Base64.DEFAULT);
         return KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(der));
     }

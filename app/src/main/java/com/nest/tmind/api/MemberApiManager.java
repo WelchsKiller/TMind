@@ -11,6 +11,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ui.LoginActivity;
+import com.nest.tmind.util.EcgUploadCrypto;
 import com.nest.tmind.util.InterventionClassifier;
 import com.nest.tmind.util.SessionManager;
 
@@ -34,9 +35,10 @@ public final class MemberApiManager {
 
     private static final String TAG = "MemberApiManager";
     private static final Gson GSON = new Gson();
-    /** 서버 crypto/public-key API 배포 전까지 false (500 방지) */
-    private static final boolean CRYPTO_PUBLIC_KEY_ENABLED = false;
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+    private static final MediaType CSV = MediaType.parse("text/csv");
+    /** 공개키 API 가 아직 미구현이라 실패가 잦다. 배포 후엔 이 간격 안에 자동 전환된다. */
+    private static final long CRYPTO_RETRY_BACKOFF_MS = 6L * 60L * 60L * 1000L;
     private MemberApiManager() {
     }
 
@@ -211,35 +213,52 @@ public final class MemberApiManager {
                 });
     }
 
-    /** 서버 공개키 API — 실패 시 무시(평문 CSV 업로드 유지). HRV 업로드 직전에만 호출. */
-    public static void prefetchPublicKey(Context context) {
-        if (!CRYPTO_PUBLIC_KEY_ENABLED) return;
+    private interface Continuation {
+        void proceed();
+    }
+
+    /**
+     * 서버 공개키를 확보한 뒤 다음 단계로 넘긴다. 공개키 API 는 아직 미구현이라
+     * 실패해도 진행을 막지 않고, 평문 CSV 폴백으로 업로드하게 둔다.
+     * 실패가 반복되면 백오프를 걸어 매 측정마다 500 을 유발하지 않는다.
+     */
+    private static void ensureCryptoPublicKey(Context context, Continuation next) {
         SessionManager session = new SessionManager(context);
-        if (session.hasCryptoPublicKey() || session.isCryptoPrefetchBlocked()) return;
+        if (session.hasCryptoPublicKey() || session.isCryptoPrefetchBlocked()) {
+            next.proceed();
+            return;
+        }
         MemberApiClient.service(context).getPublicKey()
                 .enqueue(new Callback<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>>() {
                     @Override
                     public void onResponse(Call<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>> call,
                                            Response<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>> response) {
-                        if (!response.isSuccessful() || response.body() == null || !response.body().isSuccess()) {
-                            if (response.code() == 404 || response.code() >= 500) {
-                                session.blockCryptoPrefetchUntil(System.currentTimeMillis()
-                                        + 24L * 60L * 60L * 1000L);
-                            }
-                            return;
+                        ApiModels.ApiResponse<ApiModels.PublicKeyResponse> body = response.body();
+                        ApiModels.PublicKeyResponse data = body != null ? body.data : null;
+                        boolean ok = response.isSuccessful() && body != null && body.isSuccess()
+                                && data != null
+                                && data.keyId != null && !data.keyId.isEmpty()
+                                && data.publicKey != null && !data.publicKey.isEmpty();
+                        if (ok) {
+                            session.setCryptoPublicKey(data.keyId, data.publicKey);
+                            session.clearCryptoPrefetchBlock();
+                            Log.i(TAG, "crypto public key ready: keyId=" + data.keyId);
+                        } else {
+                            session.blockCryptoPrefetchUntil(
+                                    System.currentTimeMillis() + CRYPTO_RETRY_BACKOFF_MS);
+                            Log.i(TAG, "crypto public key unavailable (http=" + response.code()
+                                    + "), falling back to plain CSV");
                         }
-                        ApiModels.PublicKeyResponse data = response.body().data;
-                        if (data == null || data.keyId == null || data.publicKey == null) return;
-                        session.setCryptoPublicKey(data.keyId, data.publicKey);
-                        session.clearCryptoPrefetchBlock();
+                        next.proceed();
                     }
 
                     @Override
                     public void onFailure(Call<ApiModels.ApiResponse<ApiModels.PublicKeyResponse>> call,
                                           Throwable t) {
-                        session.blockCryptoPrefetchUntil(System.currentTimeMillis()
-                                + 24L * 60L * 60L * 1000L);
-                        Log.d(TAG, "public key prefetch skipped: " + t.getMessage());
+                        session.blockCryptoPrefetchUntil(
+                                System.currentTimeMillis() + CRYPTO_RETRY_BACKOFF_MS);
+                        Log.i(TAG, "crypto public key fetch failed: " + t.getMessage());
+                        next.proceed();
                     }
                 });
     }
@@ -316,27 +335,48 @@ public final class MemberApiManager {
      */
     public static void uploadHrv(Context context, boolean event, long measuredAtMs,
                                  boolean measurementValid, ResultCallback<Void> callback) {
-        prefetchPublicKey(context);
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0) {
             reportHrvFailure(context, callback, "세션이 없어 심박변이도를 전송하지 못했습니다.");
             return;
         }
-        File signalFile = buildSignalFile(context);
-        if (signalFile == null) {
-            reportHrvFailure(context, callback, "ECG 신호 파일이 없어 심박변이도를 전송하지 못했습니다.");
-            return;
-        }
+        ensureCryptoPublicKey(context, new Continuation() {
+            @Override
+            public void proceed() {
+                sendHrv(context, sessionId, measuredAtMs, measurementValid, callback);
+            }
+        });
+    }
+
+    /** 5분 원본 CSV 직렬화와 암호화는 MB 단위 작업이라 메인 스레드에서 돌리지 않는다. */
+    private static void sendHrv(Context context, long sessionId, long measuredAtMs,
+                                boolean measurementValid, ResultCallback<Void> callback) {
         long measuredAt = measuredAtMs > 0 ? measuredAtMs : System.currentTimeMillis();
+        new Thread(() -> {
+            SignalPart part = buildSignalPart(context, measuredAt);
+            new android.os.Handler(Looper.getMainLooper()).post(() -> {
+                if (part == null) {
+                    reportHrvFailure(context, callback,
+                            "ECG 신호 파일이 없어 심박변이도를 전송하지 못했습니다.");
+                    return;
+                }
+                postHrv(context, sessionId, measuredAt, measurementValid, part, callback);
+            });
+        }, "ecg-signal-build").start();
+    }
+
+    private static void postHrv(Context context, long sessionId, long measuredAt,
+                                boolean measurementValid, SignalPart signalPart,
+                                ResultCallback<Void> callback) {
         MultipartBody.Part data = MultipartBody.Part.createFormData("data", null,
                 RequestBody.create(GSON.toJson(buildHrvSaveRequest(measuredAt, measurementValid)),
                         JSON));
-        RequestBody fileBody = RequestBody.create(signalFile, MediaType.parse("text/csv"));
-        MultipartBody.Part signal = MultipartBody.Part.createFormData(
-                "signal", signalFile.getName(), fileBody);
+        MultipartBody.Part signal = MultipartBody.Part.createFormData("signal",
+                signalPart.uploadName, RequestBody.create(signalPart.file, signalPart.contentType));
         Log.d(TAG, "uploadHrv sessionId=" + sessionId + " measuredAt=" + measuredAt
                 + " valid=" + measurementValid
-                + " signalBytes=" + signalFile.length()
+                + " signalName=" + signalPart.uploadName
+                + " signalBytes=" + signalPart.file.length()
                 + " samples=" + (LastEcgResult.lastRawSignal != null
                         ? LastEcgResult.lastRawSignal.length
                         : (LastEcgResult.lastSpike != null ? LastEcgResult.lastSpike.length : 0)));
@@ -1003,25 +1043,73 @@ public final class MemberApiManager {
         return fallback;
     }
 
-    private static File buildSignalFile(Context context) {
+    /** multipart signal 파트. 공개키가 있으면 암호화 JSON, 없으면 평문 CSV 폴백. */
+    private static final class SignalPart {
+        final File file;
+        final String uploadName;
+        final MediaType contentType;
+
+        SignalPart(File file, String uploadName, MediaType contentType) {
+            this.file = file;
+            this.uploadName = uploadName;
+            this.contentType = contentType;
+        }
+    }
+
+    private static SignalPart buildSignalPart(Context context, long measuredAt) {
+        byte[] csv = buildSignalCsvBytes();
+        if (csv == null) return null;
+        SessionManager session = new SessionManager(context);
+        if (session.hasCryptoPublicKey()) {
+            SignalPart encrypted = buildEncryptedSignalPart(context, csv, measuredAt,
+                    session.getCryptoKeyId(), session.getCryptoPublicKey());
+            if (encrypted != null) return encrypted;
+        }
+        File out = writeCacheFile(context, "ecg-raw-signal.csv", csv);
+        return out != null ? new SignalPart(out, out.getName(), CSV) : null;
+    }
+
+    private static SignalPart buildEncryptedSignalPart(Context context, byte[] csv, long measuredAt,
+                                                       String keyId, String publicKeyPem) {
         try {
-            float[] wave = LastEcgResult.lastRawSignal;
-            if (wave == null || wave.length == 0) {
-                wave = LastEcgResult.lastSpike;
-            }
-            if (wave == null || wave.length == 0) return null;
-            File out = new File(context.getCacheDir(), "ecg-raw-signal.csv");
+            EcgUploadCrypto.EncryptedPayload payload = EcgUploadCrypto.encrypt(
+                    csv, EcgUploadCrypto.parseRsaPublicKey(publicKeyPem), keyId);
+            File out = writeCacheFile(context, "ecg-signal-encrypted.json",
+                    EcgUploadCrypto.toJsonBytes(payload));
+            if (out == null) return null;
+            return new SignalPart(out, "ecg_" + measuredAt + ".json", JSON);
+        } catch (Exception e) {
+            Log.w(TAG, "signal encryption failed, falling back to plain CSV", e);
+            return null;
+        }
+    }
+
+    private static byte[] buildSignalCsvBytes() {
+        float[] wave = LastEcgResult.lastRawSignal;
+        if (wave == null || wave.length == 0) {
+            wave = LastEcgResult.lastSpike;
+        }
+        if (wave == null || wave.length == 0) return null;
+        StringBuilder sb = new StringBuilder(wave.length * 12);
+        sb.append("index,value\n");
+        for (int i = 0; i < wave.length; i++) {
+            sb.append(i).append(',').append(wave[i]).append('\n');
+        }
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static File writeCacheFile(Context context, String name, byte[] content) {
+        try {
+            File out = new File(context.getCacheDir(), name);
             FileOutputStream fos = new FileOutputStream(out, false);
-            StringBuilder sb = new StringBuilder(wave.length * 12);
-            sb.append("index,value\n");
-            for (int i = 0; i < wave.length; i++) {
-                sb.append(i).append(',').append(wave[i]).append('\n');
+            try {
+                fos.write(content);
+            } finally {
+                fos.close();
             }
-            fos.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-            fos.close();
             return out;
         } catch (Exception e) {
-            Log.w(TAG, "buildSignalFile failed", e);
+            Log.w(TAG, "signal file write failed: " + name, e);
             return null;
         }
     }

@@ -131,36 +131,7 @@ public final class ApiModels {
         }
     }
 
-    /** HRV multipart 의 data 파트 JSON */
-    public static final class HrvUploadData {
-        public final long measuredAt;
-        public final boolean measurementValid;
-        public final int bpm;
-        public final int hrvMs;
-        public final int rrMs;
-        public final int stressScore;
-        public final int fs;
-        /** Hybrid 암호화 시 서버 공개키 keyId */
-        public final String keyId;
-
-        public HrvUploadData(long measuredAt, boolean measurementValid,
-                             int bpm, int hrvMs, int rrMs, int stressScore, int fs) {
-            this(measuredAt, measurementValid, bpm, hrvMs, rrMs, stressScore, fs, null);
-        }
-
-        public HrvUploadData(long measuredAt, boolean measurementValid,
-                             int bpm, int hrvMs, int rrMs, int stressScore, int fs, String keyId) {
-            this.measuredAt = measuredAt;
-            this.measurementValid = measurementValid;
-            this.bpm = bpm;
-            this.hrvMs = hrvMs;
-            this.rrMs = rrMs;
-            this.stressScore = stressScore;
-            this.fs = fs;
-            this.keyId = keyId;
-        }
-    }
-
+    /** keyId 는 signal 파트의 암호화 JSON 안에서만 전달한다(서버 합의). */
     public static final class PublicKeyResponse {
         public String keyId;
         /** PEM 또는 Base64 DER */
