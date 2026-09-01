@@ -8,6 +8,7 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.reflect.TypeToken;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ui.LoginActivity;
@@ -18,10 +19,13 @@ import com.nest.tmind.util.SessionManager;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -37,8 +41,10 @@ public final class MemberApiManager {
     private static final Gson GSON = new Gson();
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     private static final MediaType CSV = MediaType.parse("text/csv");
-    /** 공개키 API 가 아직 미구현이라 실패가 잦다. 배포 후엔 이 간격 안에 자동 전환된다. */
+    /** 공개키 조회가 실패했을 때 재시도 간격. 서버 배포 후엔 이 간격 안에 암호화로 전환된다. */
     private static final long CRYPTO_RETRY_BACKOFF_MS = 6L * 60L * 60L * 1000L;
+    /** E00503/E00504 는 한 번만 재전송한다. 원인이 그대로면 반복해도 같은 결과다. */
+    private static final int HRV_MAX_ATTEMPTS = 2;
     private MemberApiManager() {
     }
 
@@ -177,6 +183,8 @@ public final class MemberApiManager {
                 session.setServerTodaySessionId(
                         body.data.currentSessionId != null ? body.data.currentSessionId : 0L);
                 session.setEventGuideText(body.data.eventGuideText);
+                session.setServerDate(body.data.serverDate);
+                warnOnDateSkew(context, body.data.serverDate);
                 callback.onSuccess(body.data);
             }
 
@@ -185,6 +193,26 @@ public final class MemberApiManager {
                 callback.onError("오늘 세션 정보를 불러오지 못했습니다.");
             }
         });
+    }
+
+    /**
+     * 미션 진행 상태는 단말 날짜(yyyyMMdd)로 키를 만들기 때문에, 단말 시계가 틀어지면
+     * 서버가 판정한 날짜와 하루치 진행이 어긋난다. serverDate 로 그 상황을 감지한다.
+     */
+    private static boolean dateSkewWarned = false;
+
+    private static void warnOnDateSkew(Context context, String serverDate) {
+        if (serverDate == null || serverDate.trim().isEmpty()) return;
+        String device = new SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(new Date());
+        if (device.equals(serverDate.trim())) {
+            dateSkewWarned = false;
+            return;
+        }
+        Log.w(TAG, "date skew: server=" + serverDate + " device=" + device);
+        if (dateSkewWarned) return;
+        dateSkewWarned = true;
+        showToast(context, "휴대폰 날짜(" + device + ")가 서버 기준 날짜(" + serverDate.trim()
+                + ")와 다릅니다. 날짜·시간 자동 설정을 켜주세요.");
     }
 
     public static void fetchParticipation(Context context,
@@ -343,14 +371,15 @@ public final class MemberApiManager {
         ensureCryptoPublicKey(context, new Continuation() {
             @Override
             public void proceed() {
-                sendHrv(context, sessionId, measuredAtMs, measurementValid, callback);
+                sendHrv(context, sessionId, measuredAtMs, measurementValid, 1, callback);
             }
         });
     }
 
     /** 5분 원본 CSV 직렬화와 암호화는 MB 단위 작업이라 메인 스레드에서 돌리지 않는다. */
     private static void sendHrv(Context context, long sessionId, long measuredAtMs,
-                                boolean measurementValid, ResultCallback<Void> callback) {
+                                boolean measurementValid, int attempt,
+                                ResultCallback<Void> callback) {
         long measuredAt = measuredAtMs > 0 ? measuredAtMs : System.currentTimeMillis();
         new Thread(() -> {
             SignalPart part = buildSignalPart(context, measuredAt);
@@ -360,13 +389,13 @@ public final class MemberApiManager {
                             "ECG 신호 파일이 없어 심박변이도를 전송하지 못했습니다.");
                     return;
                 }
-                postHrv(context, sessionId, measuredAt, measurementValid, part, callback);
+                postHrv(context, sessionId, measuredAt, measurementValid, part, attempt, callback);
             });
         }, "ecg-signal-build").start();
     }
 
     private static void postHrv(Context context, long sessionId, long measuredAt,
-                                boolean measurementValid, SignalPart signalPart,
+                                boolean measurementValid, SignalPart signalPart, int attempt,
                                 ResultCallback<Void> callback) {
         MultipartBody.Part data = MultipartBody.Part.createFormData("data", null,
                 RequestBody.create(GSON.toJson(buildHrvSaveRequest(measuredAt, measurementValid)),
@@ -381,21 +410,29 @@ public final class MemberApiManager {
                         ? LastEcgResult.lastRawSignal.length
                         : (LastEcgResult.lastSpike != null ? LastEcgResult.lastSpike.length : 0)));
         MemberApiClient.service(context).uploadHrv(sessionId, data, signal)
-                .enqueue(new Callback<ApiModels.ApiResponse<String>>() {
+                .enqueue(new Callback<ApiModels.ApiResponse<JsonElement>>() {
                     @Override
-                    public void onResponse(Call<ApiModels.ApiResponse<String>> call,
-                                           Response<ApiModels.ApiResponse<String>> response) {
+                    public void onResponse(Call<ApiModels.ApiResponse<JsonElement>> call,
+                                           Response<ApiModels.ApiResponse<JsonElement>> response) {
                         if (handleAuthFailure(context, response.code(), response)) {
                             return;
                         }
-                        ApiModels.ApiResponse<String> body = response.body();
+                        ApiModels.ApiResponse<JsonElement> body = response.body();
                         if (!response.isSuccessful() || (body != null && !body.isSuccess())) {
                             String fallback = "심박변이도 전송에 실패했습니다.";
+                            // errorBody 는 한 번만 읽을 수 있어, 코드와 메시지를 같은 raw 에서 뽑는다.
+                            String raw = body != null ? null : readErrorBody(response);
+                            String code = body != null ? body.code : errorCodeFromRaw(raw);
                             String detail = body != null
                                     ? apiErrorMessage(body, response.code(), fallback)
-                                    : httpErrorMessage(response, fallback);
+                                    : httpErrorMessage(response, raw, fallback);
                             Log.w(TAG, "uploadHrv failed: http=" + response.code()
+                                    + " code=" + code
                                     + " url=" + call.request().url() + " detail=" + detail);
+                            if (retryHrv(context, sessionId, measuredAt, measurementValid,
+                                    attempt, code, callback)) {
+                                return;
+                            }
                             reportHrvFailure(context, callback, detail);
                             return;
                         }
@@ -405,12 +442,38 @@ public final class MemberApiManager {
                     }
 
                     @Override
-                    public void onFailure(Call<ApiModels.ApiResponse<String>> call, Throwable t) {
+                    public void onFailure(Call<ApiModels.ApiResponse<JsonElement>> call, Throwable t) {
                         Log.w(TAG, "uploadHrv error", t);
                         reportHrvFailure(context, callback,
                                 "심박변이도 전송 중 오류가 발생했습니다. 네트워크를 확인해 주세요.");
                     }
                 });
+    }
+
+    /**
+     * E00503(ECG 누락)은 신호를 다시 만들어, E00504(복호화 실패)는 공개키를 다시 받아
+     * 재암호화해서 보내야 한다. 같은 요청을 그대로 재시도하면 동일하게 거부된다.
+     * 거부된 요청은 서버에 아무것도 저장되지 않으므로 재전송해도 중복이 생기지 않는다.
+     *
+     * @return 재전송을 시작했으면 true (호출부는 실패 보고를 건너뛴다)
+     */
+    private static boolean retryHrv(Context context, long sessionId, long measuredAt,
+                                    boolean measurementValid, int attempt, String errorCode,
+                                    ResultCallback<Void> callback) {
+        if (errorCode == null || attempt >= HRV_MAX_ATTEMPTS) return false;
+        if ("E00504".equals(errorCode)) {
+            Log.i(TAG, "uploadHrv E00504: 공개키 재조회 후 재암호화 재전송");
+            new SessionManager(context).clearCryptoPublicKey();
+            ensureCryptoPublicKey(context, () -> sendHrv(context, sessionId, measuredAt,
+                    measurementValid, attempt + 1, callback));
+            return true;
+        }
+        if ("E00503".equals(errorCode)) {
+            Log.i(TAG, "uploadHrv E00503: ECG 신호 재생성 후 재전송");
+            sendHrv(context, sessionId, measuredAt, measurementValid, attempt + 1, callback);
+            return true;
+        }
+        return false;
     }
 
     private static ApiModels.HrvSaveRequest buildHrvSaveRequest(long measuredAt,
@@ -461,14 +524,14 @@ public final class MemberApiManager {
             return;
         }
         MemberApiClient.service(context).skipHrv(sessionId, new ApiModels.SkipHrvRequest(reason))
-                .enqueue(new Callback<ApiModels.ApiResponse<String>>() {
+                .enqueue(new Callback<ApiModels.ApiResponse<JsonElement>>() {
                     @Override
-                    public void onResponse(Call<ApiModels.ApiResponse<String>> call,
-                                           Response<ApiModels.ApiResponse<String>> response) {
+                    public void onResponse(Call<ApiModels.ApiResponse<JsonElement>> call,
+                                           Response<ApiModels.ApiResponse<JsonElement>> response) {
                         if (handleAuthFailure(context, response.code(), response)) {
                             return;
                         }
-                        ApiModels.ApiResponse<String> body = response.body();
+                        ApiModels.ApiResponse<JsonElement> body = response.body();
                         if (!response.isSuccessful() || body == null || !body.isSuccess()) {
                             if (callback != null) {
                                 callback.onError(errorMessage(body, response.code(),
@@ -481,7 +544,7 @@ public final class MemberApiManager {
                     }
 
                     @Override
-                    public void onFailure(Call<ApiModels.ApiResponse<String>> call, Throwable t) {
+                    public void onFailure(Call<ApiModels.ApiResponse<JsonElement>> call, Throwable t) {
                         if (callback != null) {
                             callback.onError("심박변이도 건너뛰기에 실패했습니다.");
                         }
@@ -510,10 +573,10 @@ public final class MemberApiManager {
                 + " valence=" + v + " arousal=" + a);
         MemberApiClient.service(context).savePrediction(sessionId,
                         new ApiModels.SavePredictionRequest(v, a))
-                .enqueue(new Callback<ApiModels.ApiResponse<String>>() {
+                .enqueue(new Callback<ApiModels.ApiResponse<JsonElement>>() {
                     @Override
-                    public void onResponse(Call<ApiModels.ApiResponse<String>> call,
-                                           Response<ApiModels.ApiResponse<String>> response) {
+                    public void onResponse(Call<ApiModels.ApiResponse<JsonElement>> call,
+                                           Response<ApiModels.ApiResponse<JsonElement>> response) {
                         if (handleAuthFailure(context, response.code(), response)) {
                             return;
                         }
@@ -524,7 +587,7 @@ public final class MemberApiManager {
                             if (callback != null) callback.onSuccess(null);
                             return;
                         }
-                        ApiModels.ApiResponse<String> body = response.body();
+                        ApiModels.ApiResponse<JsonElement> body = response.body();
                         if (!response.isSuccessful() || (body != null && !body.isSuccess())) {
                             String fallback = "예측 저장에 실패했습니다.";
                             String detail = body != null
@@ -545,7 +608,7 @@ public final class MemberApiManager {
                     }
 
                     @Override
-                    public void onFailure(Call<ApiModels.ApiResponse<String>> call, Throwable t) {
+                    public void onFailure(Call<ApiModels.ApiResponse<JsonElement>> call, Throwable t) {
                         Log.w(TAG, "savePrediction error", t);
                         if (callback != null) {
                             callback.onError("예측 저장 중 오류가 발생했습니다.");
@@ -620,14 +683,14 @@ public final class MemberApiManager {
         MemberApiClient.service(context).submitFeedback(sessionId,
                         new ApiModels.FeedbackRequest(match, reasonCode, cv, ca,
                                 System.currentTimeMillis()))
-                .enqueue(new Callback<ApiModels.ApiResponse<String>>() {
+                .enqueue(new Callback<ApiModels.ApiResponse<JsonElement>>() {
                     @Override
-                    public void onResponse(Call<ApiModels.ApiResponse<String>> call,
-                                           Response<ApiModels.ApiResponse<String>> response) {
+                    public void onResponse(Call<ApiModels.ApiResponse<JsonElement>> call,
+                                           Response<ApiModels.ApiResponse<JsonElement>> response) {
                         if (handleAuthFailure(context, response.code(), response)) {
                             return;
                         }
-                        ApiModels.ApiResponse<String> body = response.body();
+                        ApiModels.ApiResponse<JsonElement> body = response.body();
                         if (!response.isSuccessful() || (body != null && !body.isSuccess())) {
                             String fallback = "피드백 전송에 실패했습니다.";
                             String detail = body != null
@@ -650,7 +713,7 @@ public final class MemberApiManager {
                     }
 
                     @Override
-                    public void onFailure(Call<ApiModels.ApiResponse<String>> call, Throwable t) {
+                    public void onFailure(Call<ApiModels.ApiResponse<JsonElement>> call, Throwable t) {
                         Log.w(TAG, "submitFeedback error", t);
                         showToast(context, "피드백 전송 중 오류가 발생했습니다.");
                     }
@@ -962,22 +1025,43 @@ public final class MemberApiManager {
     }
 
     private static String httpErrorMessage(Response<?> response, String fallback) {
+        return httpErrorMessage(response, readErrorBody(response), fallback);
+    }
+
+    /** 에러 코드와 메시지를 모두 써야 하는 곳에서는 raw 를 한 번만 읽어 넘긴다. */
+    private static String httpErrorMessage(Response<?> response, String raw, String fallback) {
         if (response == null) return fallback;
-        try {
-            ResponseBody errBody = response.errorBody();
-            // 성공 응답인데 파싱 실패인 경우 body 를 이미 소비했을 수 있음
-            if (errBody != null) {
-                String raw = errBody.string();
-                Log.w(TAG, "error body(" + response.code() + "): " + raw);
-                String parsed = parseErrorRaw(raw);
-                if (parsed != null) return parsed;
-            }
-        } catch (Exception ignored) {
-        }
+        String parsed = parseErrorRaw(raw);
+        if (parsed != null) return parsed;
         if (response.code() == 401) return "인증이 만료되었습니다. 다시 로그인해 주세요.";
         if (response.code() == 403) return "권한이 없습니다. 다시 로그인해 주세요.";
         if (response.code() == 404) return "요청한 정보를 찾을 수 없습니다.";
         return fallback + " (HTTP " + response.code() + ")";
+    }
+
+    /** errorBody 는 스트림이라 한 번만 읽을 수 있다. */
+    private static String readErrorBody(Response<?> response) {
+        if (response == null) return null;
+        try {
+            // 성공 응답인데 파싱 실패인 경우 body 를 이미 소비했을 수 있음
+            ResponseBody errBody = response.errorBody();
+            if (errBody == null) return null;
+            String raw = errBody.string();
+            Log.w(TAG, "error body(" + response.code() + "): " + raw);
+            return raw;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String errorCodeFromRaw(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        try {
+            ApiModels.ApiResponse<?> err = GSON.fromJson(raw, ApiModels.ApiResponse.class);
+            return err != null ? err.code : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static String parseErrorRaw(String raw) {
@@ -1127,7 +1211,7 @@ public final class MemberApiManager {
         return out;
     }
 
-    private static final class LoggingCallback implements Callback<ApiModels.ApiResponse<String>> {
+    private static final class LoggingCallback implements Callback<ApiModels.ApiResponse<JsonElement>> {
         private final String label;
         private final Context context;
 
@@ -1137,12 +1221,12 @@ public final class MemberApiManager {
         }
 
         @Override
-        public void onResponse(Call<ApiModels.ApiResponse<String>> call,
-                               Response<ApiModels.ApiResponse<String>> response) {
+        public void onResponse(Call<ApiModels.ApiResponse<JsonElement>> call,
+                               Response<ApiModels.ApiResponse<JsonElement>> response) {
             if (handleAuthFailure(context, response.code(), response)) {
                 return;
             }
-            ApiModels.ApiResponse<String> body = response.body();
+            ApiModels.ApiResponse<JsonElement> body = response.body();
             // HTTP 성공 + 본문 없음은 정상 처리 (서버가 빈 본문을 주는 경우가 있음)
             boolean failed = !response.isSuccessful() || (body != null && !body.isSuccess());
             if (!failed) {
@@ -1161,7 +1245,7 @@ public final class MemberApiManager {
         }
 
         @Override
-        public void onFailure(Call<ApiModels.ApiResponse<String>> call, Throwable t) {
+        public void onFailure(Call<ApiModels.ApiResponse<JsonElement>> call, Throwable t) {
             Log.w(TAG, label + " error", t);
             if (context != null) {
                 showToast(context, label + " 전송 중 오류가 발생했습니다.");

@@ -16,7 +16,8 @@ public final class ApiModels {
 
         public boolean isSuccess() {
             if (code == null || code.isEmpty()) {
-                return data != null;
+                // data 가 JsonElement 인 경우 서버의 null 은 JsonNull 로 들어온다.
+                return data != null && !(data instanceof com.google.gson.JsonNull);
             }
             return "S00000".equals(code);
         }
@@ -68,6 +69,7 @@ public final class ApiModels {
 
     public static final class TodayResponse {
         public String currentType;
+        /** 오후인데 오전 세션을 못 끝냈으면 "AM", 그 외 null. HRV 무효로 보류된 날은 제외된다. */
         public String missedType;
         public Long currentSessionId;
         public Boolean hrvDone;
@@ -79,11 +81,9 @@ public final class ApiModels {
         public int completedCount;
         public boolean eventActive;
         public String eventGuideText;
-        /** 참여 기간 중 완료 세션이 있는 날 수 (서버 추가 예정) */
+        /** 연구 기간 중 세션을 완료한 날 수. 하루에 여러 번 해도 1일로 센다. */
         public Integer participatedDays;
-        /** 연구 N일차 (서버 추가 예정) */
-        public Integer studyDayIndex;
-        /** 서버 기준 오늘 날짜 yyyy-MM-dd (서버 추가 예정) */
+        /** 서버가 세션 판정에 사용한 오늘 날짜 yyyy-MM-dd */
         public String serverDate;
     }
 

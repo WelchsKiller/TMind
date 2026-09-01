@@ -53,6 +53,10 @@ public final class EcgUploadCrypto {
         }
     }
 
+    /**
+     * 공개키만 표준 Base64(X.509 SubjectPublicKeyInfo DER)이고, 업로드 페이로드의
+     * encryptedCek/iv/ciphertext/authTag 는 Base64URL 이다. 디코더가 다르므로 섞지 않는다.
+     */
     public static PublicKey parseRsaPublicKey(String pemOrBase64) throws Exception {
         if (pemOrBase64 == null || pemOrBase64.trim().isEmpty()) {
             throw new IllegalArgumentException("empty public key");
@@ -61,7 +65,7 @@ public final class EcgUploadCrypto {
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
                 .replaceAll("\\s", "")
-                // 표준 Base64 에는 '-','_' 가 없어서 URL-safe 로 내려와도 안전하게 되돌린다.
+                // 표준 Base64 에는 '-','_' 가 없어서, URL-safe 로 내려와도 안전하게 되돌린다.
                 .replace('-', '+')
                 .replace('_', '/');
         byte[] der = Base64.decode(normalized, Base64.DEFAULT);

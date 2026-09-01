@@ -32,6 +32,7 @@ public class SessionManager {
     private static final String KEY_CRYPTO_PUBLIC_KEY = "crypto_public_key";
     private static final String KEY_CRYPTO_PREFETCH_BLOCKED_UNTIL = "crypto_prefetch_blocked_until";
     private static final String KEY_SERVER_TODAY_SESSION_ID = "server_today_session_id";
+    private static final String KEY_SERVER_DATE = "server_date";
     private static final String KEY_EMA_Q_CACHE_JSON = "ema_questions_cache_json";
     private static final String KEY_EMA_Q_CACHE_SID = "ema_questions_cache_session_id";
     /** 피드백은 예측이 먼저 저장된 세션에서만 받아준다(E00702). */
@@ -66,6 +67,15 @@ public class SessionManager {
 
     public long getServerTodaySessionId() {
         return sp.getLong(KEY_SERVER_TODAY_SESSION_ID, 0L);
+    }
+
+    /** 서버가 세션 판정에 쓴 오늘 날짜(yyyy-MM-dd). 단말 시계가 틀어졌는지 판단하는 기준. */
+    public void setServerDate(String serverDate) {
+        sp.edit().putString(KEY_SERVER_DATE, serverDate != null ? serverDate : "").apply();
+    }
+
+    public String getServerDate() {
+        return sp.getString(KEY_SERVER_DATE, "");
     }
 
     public void clearEmaQuestionsCache() {
@@ -297,6 +307,15 @@ public class SessionManager {
 
     public boolean hasCryptoPublicKey() {
         return !getCryptoKeyId().isEmpty() && !getCryptoPublicKey().isEmpty();
+    }
+
+    /** 서버가 E00504(복호화 실패)를 주면 캐시된 키가 서버 키와 어긋난 것이므로 버린다. */
+    public void clearCryptoPublicKey() {
+        sp.edit()
+                .remove(KEY_CRYPTO_KEY_ID)
+                .remove(KEY_CRYPTO_PUBLIC_KEY)
+                .remove(KEY_CRYPTO_PREFETCH_BLOCKED_UNTIL)
+                .apply();
     }
 
     public void blockCryptoPrefetchUntil(long epochMs) {
