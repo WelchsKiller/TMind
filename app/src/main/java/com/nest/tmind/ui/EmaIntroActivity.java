@@ -130,6 +130,12 @@ public class EmaIntroActivity extends BaseSeniorActivity {
                             i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, sessionType.name());
                             i.putExtra(EmaSurveyActivity.EXTRA_REMOTE_QUESTIONS_JSON,
                                     MemberApiManager.encodeQuestions(data));
+                            i.putExtra(AnalysisResultActivity.EXTRA_FROM_HRV,
+                                    getIntent().getBooleanExtra(
+                                            AnalysisResultActivity.EXTRA_FROM_HRV, false));
+                            i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL,
+                                    getIntent().getBooleanExtra(
+                                            AnalysisResultActivity.EXTRA_ADDITIONAL, false));
                             startActivity(i);
                             finish();
                         });

@@ -8,7 +8,6 @@ import android.widget.TextView;
 import com.nest.tmind.R;
 import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.util.DataQueueManager;
-import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.MissionManager;
 
 import org.json.JSONObject;
@@ -71,26 +70,13 @@ public class FeedbackActivity extends BaseSeniorActivity {
     private void goHomeAfterFeedback() {
         boolean fromHrv = getIntent().getBooleanExtra(EXTRA_FROM_HRV, false);
         boolean additional = getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false);
-        if (fromHrv) {
-            Intent i = new Intent(this, EmaIntroActivity.class);
-            i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
-                    additional ? EmaQuestionBank.SessionType.EVENT.name()
-                            : mapMainEmaSession().name());
-            startActivity(i);
+        if (fromHrv && additional) {
+            startActivity(new Intent(this, VoiceDiaryActivity.class));
         } else {
             Intent i = new Intent(this, DashboardActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(i);
         }
         finish();
-    }
-
-    private EmaQuestionBank.SessionType mapMainEmaSession() {
-        switch (MissionManager.mainSessionByHour()) {
-            case AFTERNOON:
-                return EmaQuestionBank.SessionType.AFTERNOON;
-            default:
-                return EmaQuestionBank.SessionType.MORNING;
-        }
     }
 }

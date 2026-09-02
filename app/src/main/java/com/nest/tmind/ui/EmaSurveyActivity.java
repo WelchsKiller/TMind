@@ -48,6 +48,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     private TextView tvQuestion, tvProgress;
     private ProgressBar progressBar;
     private View[] optionViews;
+    private boolean submitting;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -322,6 +323,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     }
 
     private void goNext() {
+        if (submitting) return;
         if (answers[currentIndex] == 0) {
             if (tts != null) tts.speak("답을 선택해 주세요");
             return;
@@ -337,6 +339,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     }
 
     private void submitAnswers() {
+        if (submitting) return;
         try {
             JSONObject payload = new JSONObject();
             payload.put("sessionType", sessionType.name());
@@ -360,9 +363,14 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         } catch (Exception ignored) {
         }
         if (!feedbackReselect && !editMode) {
-            submitToServer();
+            submitToServerThen(this::afterEmaSubmitted);
+            return;
         }
 
+        afterEmaSubmitted();
+    }
+
+    private void afterEmaSubmitted() {
         if (feedbackReselect) {
             Intent i = new Intent(this, FeedbackActivity.class);
             i.putExtra(FeedbackActivity.EXTRA_CHOICE, "disagree");
@@ -384,13 +392,24 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         }
 
         new MissionManager(this).setEmaDone();
-        // 다음 세션(오후·추가)에서 이전 답이 남지 않도록 진행 저장 삭제 (수정은 히스토리에서 복원)
         session.clearEmaProgress();
 
         MissionManager mission = new MissionManager(this);
-        boolean additional = mission.isAdditionalMeasureMode();
+        boolean additional = getIntent().getBooleanExtra(
+                AnalysisResultActivity.EXTRA_ADDITIONAL, false)
+                || mission.isAdditionalMeasureMode();
+        boolean fromHrv = getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_FROM_HRV, false);
 
-        if (!editMode && additional) {
+        if (fromHrv) {
+            Intent analysis = new Intent(this, AnalysisResultActivity.class);
+            analysis.putExtra(AnalysisResultActivity.EXTRA_FROM_HRV, true);
+            analysis.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, additional);
+            startActivity(analysis);
+            finish();
+            return;
+        }
+
+        if (additional) {
             startActivity(new Intent(this, VoiceDiaryActivity.class));
             finish();
             return;
@@ -398,7 +417,9 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         goDashboard();
     }
 
-    private void submitToServer() {
+    private void submitToServerThen(Runnable onDone) {
+        if (submitting) return;
+        submitting = true;
         if (!hasRemoteQuestionIds()) {
             java.util.List<ApiModels.QuestionResponse> cached = loadRemoteQuestions();
             if (cached != null && !cached.isEmpty()) {
@@ -406,7 +427,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             }
         }
         if (hasRemoteQuestionIds()) {
-            sendEmaToServer();
+            sendEmaToServer(onDone);
             return;
         }
         boolean event = new MissionManager(this).isAdditionalMeasureMode();
@@ -417,22 +438,32 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
                         runOnUiThread(() -> {
                             applyRemoteQuestions(data);
                             if (hasRemoteQuestionIds()) {
-                                sendEmaToServer();
+                                sendEmaToServer(onDone);
                             } else {
+                                submitting = false;
                                 Toast.makeText(EmaSurveyActivity.this,
                                         R.string.ema_submit_skipped_no_ids, Toast.LENGTH_LONG).show();
+                                if (!fromHrvFlow()) onDone.run();
                             }
                         });
                     }
 
                     @Override
                     public void onError(String message) {
-                        runOnUiThread(() -> Toast.makeText(EmaSurveyActivity.this,
-                                message != null ? message
-                                        : getString(R.string.ema_submit_skipped_no_ids),
-                                Toast.LENGTH_LONG).show());
+                        runOnUiThread(() -> {
+                            submitting = false;
+                            Toast.makeText(EmaSurveyActivity.this,
+                                    message != null ? message
+                                            : getString(R.string.ema_submit_skipped_no_ids),
+                                    Toast.LENGTH_LONG).show();
+                            if (!fromHrvFlow()) onDone.run();
+                        });
                     }
                 });
+    }
+
+    private boolean fromHrvFlow() {
+        return getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_FROM_HRV, false);
     }
 
     private boolean hasRemoteQuestionIds() {
@@ -443,7 +474,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         return false;
     }
 
-    private void sendEmaToServer() {
+    private void sendEmaToServer(Runnable onDone) {
         float valence = 0f;
         float arousal = 0f;
         RussellEmotionCalculator.Point gt = russellPointFromAnswers();
@@ -454,7 +485,23 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         MemberApiManager.submitEma(this,
                 new MissionManager(this).isAdditionalMeasureMode(),
                 MemberApiManager.buildEmaRequests(remoteQuestionIds, answers),
-                valence, arousal);
+                valence, arousal,
+                new MemberApiManager.ResultCallback<Void>() {
+                    @Override
+                    public void onSuccess(Void ignored) {
+                        runOnUiThread(onDone);
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(() -> {
+                            submitting = false;
+                            Toast.makeText(EmaSurveyActivity.this,
+                                    message != null ? message : "설문을 서버에 보내지 못했습니다.",
+                                    Toast.LENGTH_LONG).show();
+                        });
+                    }
+                });
     }
 
     /** 로컬 문항 key 기준으로 러셀 좌표를 계산. 서버 문항 수가 달라도 겹치는 만큼만 사용. */

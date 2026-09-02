@@ -44,7 +44,28 @@ public class SessionManager {
         return sessionId > 0 && sp.getLong("prediction_saved_session_id", 0L) == sessionId;
     }
 
-    /** 피드백의 correctedValence/Arousal 은 필수라, MATCH/UNKNOWN 이면 예측값을 그대로 보낸다. */
+    /** 예측은 HRV 가 서버에 저장된 뒤에만 받아준다(E00206). 그때까지 보류해 둔다. */
+    public void setPredictionPending(long sessionId) {
+        sp.edit().putLong("prediction_pending_session_id", sessionId).apply();
+    }
+
+    public long getPredictionPendingSessionId() {
+        return sp.getLong("prediction_pending_session_id", 0L);
+    }
+
+    public void clearPredictionPending() {
+        sp.edit().remove("prediction_pending_session_id").apply();
+    }
+
+    public void setRemoteEmaDone(long sessionId) {
+        sp.edit().putLong("remote_ema_done_session_id", sessionId).apply();
+    }
+
+    public boolean isRemoteEmaDone(long sessionId) {
+        return sessionId > 0 && sp.getLong("remote_ema_done_session_id", 0L) == sessionId;
+    }
+
+    /** 피드백의 수정 좌표는 MISMATCH(사분면 수정) 일 때만 보낸다. */
     public void setLastPrediction(float valence, float arousal) {
         sp.edit()
                 .putFloat("last_prediction_valence", valence)

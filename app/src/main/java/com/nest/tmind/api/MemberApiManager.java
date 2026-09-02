@@ -179,12 +179,27 @@ public final class MemberApiManager {
                 session.setRemoteEventActive(body.data.eventActive);
                 if (body.data.hrvStatus != null && !body.data.hrvStatus.trim().isEmpty()) {
                     session.setRemoteHrvStatus(body.data.hrvStatus);
+                } else if (Boolean.TRUE.equals(body.data.hrvDone)) {
+                    session.setRemoteHrvStatus("VALID");
+                } else {
+                    // 다른 세션에 올린 VALID 가 남아 있으면 추가 측정이 잘못 열린다.
+                    session.setRemoteHrvStatus("");
                 }
+                Log.i(TAG, "today " + GSON.toJson(body.data));
                 session.setServerTodaySessionId(
                         body.data.currentSessionId != null ? body.data.currentSessionId : 0L);
+                if (body.data.currentSessionId != null && body.data.currentSessionId > 0) {
+                    // 추가(Event) 세션은 오늘 정규 세션의 HRV 가 끝난 뒤에만 열린다.
+                    // HRV 를 다른 sessionId 에 올리면 서버는 오늘 측정을 안 한 것으로 본다.
+                    session.setCurrentSessionId(false, body.data.currentSessionId);
+                }
                 session.setEventGuideText(body.data.eventGuideText);
                 session.setServerDate(body.data.serverDate);
                 warnOnDateSkew(context, body.data.serverDate);
+                if (Boolean.TRUE.equals(body.data.emaDone)
+                        && body.data.currentSessionId != null && body.data.currentSessionId > 0) {
+                    session.setRemoteEmaDone(body.data.currentSessionId);
+                }
                 callback.onSuccess(body.data);
             }
 
@@ -301,11 +316,57 @@ public final class MemberApiManager {
             forceRelogin(context, "로그인이 필요합니다. 다시 로그인해 주세요.");
             return;
         }
-        long cached = session.getCurrentSessionId(event);
-        if (cached > 0) {
-            callback.onSuccess(cached);
+        if (!event) {
+            long todayId = session.getServerTodaySessionId();
+            if (todayId > 0) {
+                session.setCurrentSessionId(false, todayId);
+                callback.onSuccess(todayId);
+                return;
+            }
+            long cachedMain = session.getCurrentSessionId(false);
+            if (cachedMain > 0) {
+                callback.onSuccess(cachedMain);
+                return;
+            }
+            postStartSession(context, session, false, callback);
             return;
         }
+        long cachedEvent = session.getCurrentSessionId(true);
+        if (isUsableEventSession(session, cachedEvent)) {
+            callback.onSuccess(cachedEvent);
+            return;
+        }
+        if (cachedEvent > 0) {
+            Log.w(TAG, "drop stale event sessionId=" + cachedEvent
+                    + " main=" + session.getCurrentSessionId(false)
+                    + " today=" + session.getServerTodaySessionId());
+            session.clearCurrentSession(true);
+        }
+        postStartSession(context, session, true, callback);
+    }
+
+    /** 추가 측정은 예측이 끝난 정규 세션과 다른 Event 세션이 필요하다. */
+    public static void startFreshEventSession(Context context, ResultCallback<Long> callback) {
+        SessionManager session = new SessionManager(context);
+        if (!session.hasAccessToken()) {
+            forceRelogin(context, "로그인이 필요합니다. 다시 로그인해 주세요.");
+            return;
+        }
+        session.clearCurrentSession(true);
+        postStartSession(context, session, true, callback);
+    }
+
+    private static boolean isUsableEventSession(SessionManager session, long eventId) {
+        if (eventId <= 0) return false;
+        long mainId = session.getCurrentSessionId(false);
+        long todayId = session.getServerTodaySessionId();
+        if (mainId > 0 && eventId == mainId) return false;
+        if (todayId > 0 && eventId == todayId) return false;
+        return !session.isPredictionSaved(eventId);
+    }
+
+    private static void postStartSession(Context context, SessionManager session, boolean event,
+                                         ResultCallback<Long> callback) {
         MemberApiClient.service(context)
                 .startSession(new ApiModels.StartSessionRequest(event, System.currentTimeMillis()))
                 .enqueue(new Callback<ApiModels.ApiResponse<ApiModels.StartSessionData>>() {
@@ -334,10 +395,17 @@ public final class MemberApiManager {
                             callback.onError(detail);
                             return;
                         }
+                        if (event && !isUsableEventSession(session, data.sessionId)) {
+                            Log.w(TAG, "startSession isEvent=true returned regular sessionId="
+                                    + data.sessionId);
+                            callback.onError("추가 측정용 세션을 만들지 못했습니다. 홈에서 다시 시도해 주세요.");
+                            return;
+                        }
                         session.setCurrentSessionId(event, data.sessionId);
                         if (data.hrvStatus != null) {
                             session.setRemoteHrvStatus(data.hrvStatus);
                         }
+                        Log.i(TAG, "startSession ok isEvent=" + event + " sessionId=" + data.sessionId);
                         callback.onSuccess(data.sessionId);
                     }
 
@@ -363,9 +431,15 @@ public final class MemberApiManager {
      */
     public static void uploadHrv(Context context, boolean event, long measuredAtMs,
                                  boolean measurementValid, ResultCallback<Void> callback) {
-        long sessionId = new SessionManager(context).getCurrentSessionId(event);
+        SessionManager session = new SessionManager(context);
+        long sessionId = session.getCurrentSessionId(event);
         if (sessionId <= 0) {
             reportHrvFailure(context, callback, "세션이 없어 심박변이도를 전송하지 못했습니다.");
+            return;
+        }
+        if (session.isPredictionSaved(sessionId) || (event && !isUsableEventSession(session, sessionId))) {
+            reportHrvFailure(context, callback,
+                    "예측이 끝난 세션에는 측정을 다시 저장할 수 없습니다. 홈에서 추가 측정을 다시 시작해 주세요.");
             return;
         }
         ensureCryptoPublicKey(context, new Continuation() {
@@ -557,6 +631,18 @@ public final class MemberApiManager {
         savePrediction(context, event, valence, arousal, null);
     }
 
+    /** HRV·EMA 저장을 기다리며 보류해 둔 예측을 보낸다. EMA 제출 성공 직후 호출. */
+    private static void flushPendingPrediction(Context context) {
+        SessionManager session = new SessionManager(context);
+        long pending = session.getPredictionPendingSessionId();
+        if (pending <= 0) return;
+        if (!session.isRemoteHrvDone() || !session.isRemoteEmaDone(pending)) return;
+        session.clearPredictionPending();
+        Log.i(TAG, "sending deferred prediction sessionId=" + pending);
+        savePrediction(context, session.getCurrentSessionId(true) == pending,
+                session.getLastPredictionValence(), session.getLastPredictionArousal(), null);
+    }
+
     public static void savePrediction(Context context, boolean event,
                                       float valence, float arousal,
                                       ResultCallback<Void> callback) {
@@ -569,6 +655,29 @@ public final class MemberApiManager {
         float v = safeFloat(valence, -1.2f, 1.2f);
         float a = safeFloat(arousal, -1.2f, 1.2f);
         session.setLastPrediction(v, a);
+        // 세션당 1회 제약이라, 결과 화면 재진입으로 중복 POST 하지 않는다.
+        if (session.isPredictionSaved(sessionId)) {
+            Log.d(TAG, "savePrediction skip: already saved sessionId=" + sessionId);
+            if (callback != null) callback.onSuccess(null);
+            return;
+        }
+        // 서버 순서: HRV(또는 skip) → EMA → 예측. HRV 직후 보내면 E00207 이다.
+        if (!session.isRemoteHrvDone()) {
+            session.setPredictionPending(sessionId);
+            Log.i(TAG, "savePrediction deferred until HRV saved. sessionId=" + sessionId);
+            if (callback != null) {
+                callback.onError("심박변이도 서버 저장이 끝나지 않았습니다. 잠시 후 다시 시도해 주세요.");
+            }
+            return;
+        }
+        if (!session.isRemoteEmaDone(sessionId)) {
+            session.setPredictionPending(sessionId);
+            Log.i(TAG, "savePrediction deferred until EMA submitted. sessionId=" + sessionId);
+            if (callback != null) {
+                callback.onError("마음상태 설문을 먼저 제출해야 합니다.");
+            }
+            return;
+        }
         Log.d(TAG, "savePrediction sessionId=" + sessionId
                 + " valence=" + v + " arousal=" + a);
         MemberApiClient.service(context).savePrediction(sessionId,
@@ -580,30 +689,32 @@ public final class MemberApiManager {
                         if (handleAuthFailure(context, response.code(), response)) {
                             return;
                         }
-                        // 세션당 1회 제약. 결과 화면 재진입 시 409 는 이미 저장된 정상 상태다.
-                        if (response.code() == 409) {
-                            Log.d(TAG, "savePrediction already saved. sessionId=" + sessionId);
-                            session.setPredictionSaved(sessionId);
-                            if (callback != null) callback.onSuccess(null);
-                            return;
-                        }
                         ApiModels.ApiResponse<JsonElement> body = response.body();
                         if (!response.isSuccessful() || (body != null && !body.isSuccess())) {
                             String fallback = "예측 저장에 실패했습니다.";
+                            // 409 를 "이미 저장됨"으로 넘겼더니 직후 피드백이 E00702(예측 미저장)로
+                            // 거부됐다. 즉 409 에서 실제 저장은 안 된다. 서버 응답을 그대로 드러낸다.
+                            String raw = body != null ? null : readErrorBody(response);
+                            String code = body != null ? body.code : errorCodeFromRaw(raw);
                             String detail = body != null
                                     ? apiErrorMessage(body, response.code(), fallback)
-                                    : httpErrorMessage(response, fallback);
+                                    : httpErrorMessage(response, raw, fallback);
                             Log.w(TAG, "savePrediction failed: http=" + response.code()
-                                    + " detail=" + detail);
+                                    + " code=" + code + " detail=" + detail);
+                            // E00206 = HRV 미저장, E00207 = EMA 미제출. 선행 단계가 끝나면 재전송한다.
+                            if ("E00206".equals(code) || "E00207".equals(code)) {
+                                session.setPredictionPending(sessionId);
+                            }
                             if (callback != null) {
                                 callback.onError(detail);
-                            } else {
+                            } else if (!"E00206".equals(code) && !"E00207".equals(code)) {
                                 showToast(context, "예측 저장 실패: " + detail);
                             }
                             return;
                         }
                         Log.d(TAG, "savePrediction ok: sessionId=" + sessionId);
                         session.setPredictionSaved(sessionId);
+                        session.clearPredictionPending();
                         if (callback != null) callback.onSuccess(null);
                     }
 
@@ -627,8 +738,9 @@ public final class MemberApiManager {
     }
 
     /**
-     * MATCH/UNKNOWN: reasonCode 없이 전송.
-     * MISMATCH: reasonCode 로 사유 전송 (Apidog FeedbackRequest).
+     * MATCH/UNKNOWN: matchResult + occurredAt 만 전송.
+     * MISMATCH: 사분면 수정으로 고른 좌표와 reasonCode 를 함께 전송.
+     * 일치·모름에 좌표를 넣으면 서버가 E00802 로 거절한다.
      */
     public static void submitFeedback(Context context, boolean event, String choice,
                                       Float correctedValence, Float correctedArousal) {
@@ -637,28 +749,28 @@ public final class MemberApiManager {
         if (sessionId <= 0) return;
         String match = matchResult(choice);
         String reason = null;
+        Float cv = null;
+        Float ca = null;
         if ("MISMATCH".equals(match)) {
             if (correctedValence == null || correctedArousal == null) {
                 showToast(context, "다른 감정 위치를 선택한 뒤 다시 제출해 주세요.");
                 return;
             }
             reason = "MANUAL_EDIT";
+            cv = safeFloat(correctedValence, -1.2f, 1.2f);
+            ca = safeFloat(correctedArousal, -1.2f, 1.2f);
         }
-        // correctedValence/Arousal 은 필수 필드다. 일치·모름이면 예측 좌표를 그대로 보낸다.
-        float cv = safeFloat(correctedValence != null
-                ? correctedValence : session.getLastPredictionValence(), -1.2f, 1.2f);
-        float ca = safeFloat(correctedArousal != null
-                ? correctedArousal : session.getLastPredictionArousal(), -1.2f, 1.2f);
         Log.d(TAG, "submitFeedback sessionId=" + sessionId + " match=" + match
                 + " valence=" + cv + " arousal=" + ca);
         final String reasonCode = reason;
+        final Float sendV = cv;
+        final Float sendA = ca;
         if (session.isPredictionSaved(sessionId)) {
-            sendFeedback(context, sessionId, match, reasonCode, cv, ca, true);
+            sendFeedback(context, sessionId, match, reasonCode, sendV, sendA, true);
             return;
         }
-        // 예측이 저장된 세션에서만 피드백을 받는다(E00702). 먼저 예측부터 올린다.
         savePredictionThen(context, event, session,
-                () -> sendFeedback(context, sessionId, match, reasonCode, cv, ca, false));
+                () -> sendFeedback(context, sessionId, match, reasonCode, sendV, sendA, false));
     }
 
     private static void savePredictionThen(Context context, boolean event,
@@ -679,7 +791,7 @@ public final class MemberApiManager {
     }
 
     private static void sendFeedback(Context context, long sessionId, String match,
-                                     String reasonCode, float cv, float ca, boolean allowRetry) {
+                                     String reasonCode, Float cv, Float ca, boolean allowRetry) {
         MemberApiClient.service(context).submitFeedback(sessionId,
                         new ApiModels.FeedbackRequest(match, reasonCode, cv, ca,
                                 System.currentTimeMillis()))
@@ -726,7 +838,7 @@ public final class MemberApiManager {
     }
 
     private static void retryFeedbackAfterPrediction(Context context, long sessionId, String match,
-                                                     String reasonCode, float cv, float ca) {
+                                                     String reasonCode, Float cv, Float ca) {
         SessionManager session = new SessionManager(context);
         savePrediction(context, session.getCurrentSessionId(true) == sessionId,
                 session.getLastPredictionValence(), session.getLastPredictionArousal(),
@@ -877,13 +989,24 @@ public final class MemberApiManager {
     public static void submitEma(Context context, boolean event,
                                  List<ApiModels.SubmitEmaRequest> responses,
                                  float valence, float arousal) {
+        submitEma(context, event, responses, valence, arousal, null);
+    }
+
+    public static void submitEma(Context context, boolean event,
+                                 List<ApiModels.SubmitEmaRequest> responses,
+                                 float valence, float arousal,
+                                 ResultCallback<Void> callback) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0) {
-            showToast(context, "세션이 없어 설문을 전송하지 못했습니다.");
+            String msg = "세션이 없어 설문을 전송하지 못했습니다.";
+            if (callback != null) callback.onError(msg);
+            else showToast(context, msg);
             return;
         }
         if (responses == null || responses.isEmpty()) {
-            showToast(context, "서버 문항 ID가 없어 설문 결과를 서버에 보내지 못했습니다.");
+            String msg = "서버 문항 ID가 없어 설문 결과를 서버에 보내지 못했습니다.";
+            if (callback != null) callback.onError(msg);
+            else showToast(context, msg);
             return;
         }
         // EMA 는 Nandy 가중합 원시값이라 예측 좌표와 스케일이 다르다 (-4 ~ 4)
@@ -894,7 +1017,41 @@ public final class MemberApiManager {
         MemberApiClient.service(context).submitEma(sessionId,
                         new ApiModels.SubmitEmaListRequest(responses, v, a,
                                 System.currentTimeMillis()))
-                .enqueue(new LoggingCallback(context, "설문 제출"));
+                .enqueue(new Callback<ApiModels.ApiResponse<JsonElement>>() {
+                    @Override
+                    public void onResponse(Call<ApiModels.ApiResponse<JsonElement>> call,
+                                           Response<ApiModels.ApiResponse<JsonElement>> response) {
+                        if (handleAuthFailure(context, response.code(), response)) {
+                            return;
+                        }
+                        ApiModels.ApiResponse<JsonElement> body = response.body();
+                        boolean failed = !response.isSuccessful()
+                                || (body != null && !body.isSuccess());
+                        if (failed) {
+                            String fallback = "설문 제출 전송에 실패했습니다.";
+                            String detail = body != null
+                                    ? apiErrorMessage(body, response.code(), fallback)
+                                    : httpErrorMessage(response, fallback);
+                            Log.w(TAG, "submitEma failed: http=" + response.code()
+                                    + " detail=" + detail);
+                            if (callback != null) callback.onError(detail);
+                            else showToast(context, "설문 제출 실패: " + detail);
+                            return;
+                        }
+                        Log.d(TAG, "submitEma ok: sessionId=" + sessionId);
+                        new SessionManager(context).setRemoteEmaDone(sessionId);
+                        flushPendingPrediction(context);
+                        if (callback != null) callback.onSuccess(null);
+                    }
+
+                    @Override
+                    public void onFailure(Call<ApiModels.ApiResponse<JsonElement>> call, Throwable t) {
+                        Log.w(TAG, "submitEma error", t);
+                        String msg = "설문 제출 전송 중 오류가 발생했습니다.";
+                        if (callback != null) callback.onError(msg);
+                        else showToast(context, msg);
+                    }
+                });
     }
 
     public static void uploadVoiceDiary(Context context, boolean event, File audioFile,
@@ -1036,6 +1193,10 @@ public final class MemberApiManager {
         if (response.code() == 401) return "인증이 만료되었습니다. 다시 로그인해 주세요.";
         if (response.code() == 403) return "권한이 없습니다. 다시 로그인해 주세요.";
         if (response.code() == 404) return "요청한 정보를 찾을 수 없습니다.";
+        // nginx 기본 client_max_body_size(1MB) 에 5분 ECG 원본이 걸린다. 앱에서 재시도해도 같다.
+        if (response.code() == 413) {
+            return "ECG 원본이 서버 업로드 용량 제한을 초과했습니다. 서버 설정 확인이 필요합니다. (HTTP 413)";
+        }
         return fallback + " (HTTP " + response.code() + ")";
     }
 
@@ -1109,6 +1270,9 @@ public final class MemberApiManager {
             if ("E00301".equals(body.code)) {
                 return "설문 문항이 아직 준비되지 않았습니다.";
             }
+            if ("E00205".equals(body.code)) {
+                return "오늘 오전/오후 심박변이도가 서버에 저장된 뒤에 추가 측정을 할 수 있습니다.";
+            }
         }
         if (body != null) {
             if (body.message != null && !body.message.isEmpty()) {
@@ -1174,12 +1338,32 @@ public final class MemberApiManager {
             wave = LastEcgResult.lastSpike;
         }
         if (wave == null || wave.length == 0) return null;
-        StringBuilder sb = new StringBuilder(wave.length * 12);
+        StringBuilder sb = new StringBuilder(wave.length * 13);
         sb.append("index,value\n");
         for (int i = 0; i < wave.length; i++) {
-            sb.append(i).append(',').append(wave[i]).append('\n');
+            sb.append(i).append(',');
+            appendMilli(sb, wave[i]);
+            sb.append('\n');
         }
         return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 기기는 12bit ADC 값을 0.003mV 단위로 올려주므로 모든 샘플이 소수 3자리로 정확히
+     * 표현된다. Float.toString 의 긴 표현(-0.043361254)을 쓰면 정보량 없이 본문만 커진다.
+     * String.format 은 샘플당 호출 비용이 커서 직접 조립하고, 로케일 소수점 문제도 피한다.
+     */
+    private static void appendMilli(StringBuilder sb, float mv) {
+        int scaled = Math.round(mv * 1000f);
+        if (scaled < 0) {
+            sb.append('-');
+            scaled = -scaled;
+        }
+        int frac = scaled % 1000;
+        sb.append(scaled / 1000).append('.')
+                .append((char) ('0' + frac / 100))
+                .append((char) ('0' + frac / 10 % 10))
+                .append((char) ('0' + frac % 10));
     }
 
     private static File writeCacheFile(Context context, String name, byte[] content) {

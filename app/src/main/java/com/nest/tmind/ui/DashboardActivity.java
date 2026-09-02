@@ -34,6 +34,11 @@ public class DashboardActivity extends BaseSeniorActivity {
     private boolean serverEventActive = true;
     private int serverParticipatedDays = -1;
 
+    private static final int SECRET_TAP_COUNT = 5;
+    private static final long SECRET_TAP_WINDOW_MS = 2000L;
+    private int titleTapCount;
+    private long lastTitleTapMs;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -45,7 +50,6 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
         setContentView(R.layout.activity_dashboard);
         mission = new MissionManager(this);
-        mission.setAdditionalMeasureMode(false);
 
         tvGreeting = findViewById(R.id.tvGreeting);
         tvProgress = findViewById(R.id.tvProgress);
@@ -72,6 +76,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         btnWeeklyTrend.setOnClickListener(v ->
                 startActivity(new Intent(this, WeeklyTrendActivity.class)));
         findViewById(R.id.btnNewParticipant).setOnClickListener(v -> confirmNewParticipant());
+        findViewById(R.id.tvTitle).setOnClickListener(v -> onTitleTap());
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -89,10 +94,8 @@ public class DashboardActivity extends BaseSeniorActivity {
     protected void onResume() {
         super.onResume();
         mission = new MissionManager(this);
-        // 추가 측정 진행 중이면 모드 유지
-        if (!mission.hasEventInProgress()) {
-            mission.setAdditionalMeasureMode(false);
-        }
+        // 추가 측정은 Event HRV 를 시작하기 전(완료 0)에도 모드를 유지해야 한다.
+        // 여기서 끄면 확인 버튼이 정규 세션으로 업로드해서 E00210 이 난다.
         mission.recalcStars();
         syncServerState();
         refreshUi();
@@ -101,25 +104,42 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void confirmNewParticipant() {
         new AlertDialog.Builder(this)
                 .setMessage(R.string.new_participant_confirm)
-                .setPositiveButton(R.string.dialog_yes, (d, w) -> {
-                    MemberApiManager.logout(this, new MemberApiManager.ResultCallback<Void>() {
-                        @Override
-                        public void onSuccess(Void data) {
-                        }
-
-                        @Override
-                        public void onError(String message) {
-                        }
-                    });
-                    session.logoutForNewParticipant();
-                    Intent i = new Intent(this, LoginActivity.class);
-                    i.putExtra(LoginActivity.EXTRA_FORCE_REGISTER, true);
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(i);
-                    finish();
-                })
+                .setPositiveButton(R.string.dialog_yes, (d, w) -> logoutToLogin())
                 .setNegativeButton(R.string.dialog_cancel, null)
                 .show();
+    }
+
+    /**
+     * 제목 연속 5회 탭: 로그아웃 후 8자리 로그인 화면으로. 참여자가 우연히 누르지 않도록
+     * 탭 간격이 벌어지면 횟수를 초기화한다.
+     */
+    private void onTitleTap() {
+        long now = System.currentTimeMillis();
+        if (now - lastTitleTapMs > SECRET_TAP_WINDOW_MS) {
+            titleTapCount = 0;
+        }
+        lastTitleTapMs = now;
+        if (++titleTapCount < SECRET_TAP_COUNT) return;
+        titleTapCount = 0;
+        logoutToLogin();
+    }
+
+    private void logoutToLogin() {
+        MemberApiManager.logout(this, new MemberApiManager.ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void data) {
+            }
+
+            @Override
+            public void onError(String message) {
+            }
+        });
+        session.logoutForNewParticipant();
+        Intent i = new Intent(this, LoginActivity.class);
+        i.putExtra(LoginActivity.EXTRA_FORCE_REGISTER, true);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(i);
+        finish();
     }
 
     private void confirmExitIfMissionsIncomplete() {
@@ -139,29 +159,49 @@ public class DashboardActivity extends BaseSeniorActivity {
             Toast.makeText(this, "추가 측정은 현재 사용할 수 없습니다.", Toast.LENGTH_SHORT).show();
             return;
         }
-        if (!isAdditionalUnlocked()) {
-            Toast.makeText(this, R.string.additional_measure_need_hrv, Toast.LENGTH_SHORT).show();
-            return;
-        }
         if (!mission.canStartAdditional() && !mission.hasEventInProgress()) {
             Toast.makeText(this, R.string.additional_measure_max, Toast.LENGTH_SHORT).show();
             return;
         }
-        mission.setAdditionalMeasureMode(true);
-        MemberApiManager.ensureSessionStarted(this, true, new MemberApiManager.ResultCallback<Long>() {
+        MemberApiManager.fetchToday(this, new MemberApiManager.ResultCallback<ApiModels.TodayResponse>() {
             @Override
-            public void onSuccess(Long data) {
-                runOnUiThread(() -> proceedAdditionalMeasure());
+            public void onSuccess(ApiModels.TodayResponse data) {
+                runOnUiThread(() -> {
+                    applyTodayResponse(data);
+                    startEventSession();
+                });
             }
 
             @Override
             public void onError(String message) {
-                runOnUiThread(() -> {
-                    mission.setAdditionalMeasureMode(false);
-                    Toast.makeText(DashboardActivity.this, message, Toast.LENGTH_LONG).show();
-                });
+                runOnUiThread(() -> Toast.makeText(DashboardActivity.this, message, Toast.LENGTH_LONG).show());
             }
         });
+    }
+
+    private void startEventSession() {
+        mission.setAdditionalMeasureMode(true);
+        MemberApiManager.ResultCallback<Long> afterEvent =
+                new MemberApiManager.ResultCallback<Long>() {
+                    @Override
+                    public void onSuccess(Long data) {
+                        runOnUiThread(() -> proceedAdditionalMeasure());
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(() -> {
+                            mission.setAdditionalMeasureMode(false);
+                            Toast.makeText(DashboardActivity.this, message, Toast.LENGTH_LONG).show();
+                        });
+                    }
+                };
+        // 진행 중인 Event 가 없으면 예측이 끝난 정규 세션 ID 를 재사용하지 않고 새로 연다.
+        if (mission.hasEventInProgress()) {
+            MemberApiManager.ensureSessionStarted(this, true, afterEvent);
+        } else {
+            MemberApiManager.startFreshEventSession(this, afterEvent);
+        }
     }
 
     private void proceedAdditionalMeasure() {
@@ -179,16 +219,21 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
     }
 
+    private static boolean isTodayHrvComplete(ApiModels.TodayResponse data) {
+        if (data == null) return false;
+        if (Boolean.TRUE.equals(data.hrvDone)) return true;
+        String status = data.hrvStatus;
+        return status != null && ("VALID".equalsIgnoreCase(status) || "SKIPPED".equalsIgnoreCase(status));
+    }
+
     /** 오늘 오전/오후 중 심박변이도 미션을 한 번이라도 완료하면 추가 측정 가능 */
     private boolean isAdditionalUnlocked() {
-        return mission.isHrvDone(MissionManager.Session.MORNING)
-                || mission.isHrvDone(MissionManager.Session.AFTERNOON);
+        return session.isRemoteHrvDone();
     }
 
     private void onHrvClick() {
         mission.setAdditionalMeasureMode(false);
-        // hrvDone 이어도 hrvStatus 가 VALID 가 아니면 다시 측정 가능
-        if (mission.isHrvDone() && session.isRemoteHrvValid()) {
+        if (session.isRemoteHrvValid()) {
             Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
         } else {
             openHrv();
@@ -236,7 +281,9 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void openHrv() {
-        startActivity(new Intent(this, HrvGuideActivity.class));
+        Intent i = new Intent(this, HrvGuideActivity.class);
+        i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, mission.isAdditionalMeasureMode());
+        startActivity(i);
     }
 
     private void openEma() {
@@ -270,13 +317,13 @@ public class DashboardActivity extends BaseSeniorActivity {
         progressBar.setMax(3);
         progressBar.setProgress(done);
 
-        applyCardState(cardHrv, mission.isHrvDone(active), R.drawable.bg_mission_card_active);
+        applyCardState(cardHrv, session.isRemoteHrvDone(), R.drawable.bg_mission_card_active);
         applyCardState(cardEma, mission.isEmaDone(active), R.drawable.bg_mission_card_ema);
         applyCardState(cardDiary, mission.isDiaryDone(active), R.drawable.bg_mission_card_diary);
 
         // 완료 여부는 체크만 표시 — 부제목은 고정(일관). 다만 HRV 무효/건너뛰기면 재측정 안내
         TextView hrvSub = cardHrv.findViewById(R.id.tvMissionSub);
-        if (mission.isHrvDone(active) && !session.isRemoteHrvValid()) {
+        if (session.isRemoteHrvDone() && !session.isRemoteHrvValid()) {
             hrvSub.setText("다시 측정해 주세요");
         } else {
             hrvSub.setText(R.string.mission_hrv_sub);
@@ -296,7 +343,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         boolean canMore = serverEventActive && (mission.canStartAdditional() || mission.hasEventInProgress());
         boolean active = unlocked && canMore;
         cardAdditional.setEnabled(active);
-        cardAdditional.setClickable(true);
+        cardAdditional.setClickable(active);
         cardAdditional.setAlpha(active ? 1f : 0.45f);
         String guide = session.getEventGuideText();
         if (!unlocked) {
@@ -359,8 +406,10 @@ public class DashboardActivity extends BaseSeniorActivity {
             serverParticipatedDays = data.participatedDays;
         }
         MissionManager.Session main = mapCurrentType(data.currentType);
-        if (Boolean.TRUE.equals(data.hrvDone)) {
+        if (isTodayHrvComplete(data)) {
             mission.setHrvDone(main);
+        } else {
+            mission.clearHrv(main);
         }
         if (Boolean.TRUE.equals(data.emaDone)) {
             mission.setEmaDone(main);
@@ -396,14 +445,15 @@ public class DashboardActivity extends BaseSeniorActivity {
         float d = getResources().getDisplayMetrics().density;
         int size = (int) (36 * d);
         int pad = (int) (3 * d);
-        for (int i = 0; i < 7; i++) {
+        int[] states = mission.getStarRow();
+        for (int i = 0; i < states.length; i++) {
             ImageView iv = new ImageView(this);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
             lp.setMargins(pad, 0, pad, 0);
             iv.setLayoutParams(lp);
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
             iv.setAdjustViewBounds(true);
-            int state = mission.getStarState(i);
+            int state = states[i];
             iv.clearColorFilter();
             if (state == MissionManager.STAR_BONUS) {
                 iv.setImageResource(R.drawable.ic_star_gold);

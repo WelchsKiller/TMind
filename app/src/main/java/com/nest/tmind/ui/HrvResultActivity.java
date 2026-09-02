@@ -12,14 +12,17 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 
 import com.nest.tmind.R;
+import com.nest.tmind.api.ApiModels;
 import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.ecg.EcgConfig;
 import com.nest.tmind.ecg.EcgSurfaceView;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ecg.MeasureSessionStats;
+import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.util.RussellEmotionCalculator;
+import com.nest.tmind.util.SessionManager;
 
 import java.util.Arrays;
 
@@ -53,6 +56,7 @@ public class HrvResultActivity extends BaseSeniorActivity {
         ecgView.setWaveColor(ContextCompat.getColor(this, R.color.teal_primary));
 
         bindLatestResult();
+        restoreAdditionalMode();
 
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvBpmLabel, R.id.tvBpm,
                 R.id.tvHrvLabel, R.id.tvHrvMs, R.id.tvExplain);
@@ -94,36 +98,41 @@ public class HrvResultActivity extends BaseSeniorActivity {
 
         navigating = true;
         btnNext.setEnabled(false);
+        Toast.makeText(this, "심박변이도를 서버에 저장하는 중입니다.", Toast.LENGTH_SHORT).show();
 
         try {
             MissionManager mission = new MissionManager(this);
-            boolean additional = mission.isAdditionalMeasureMode();
-            MemberApiManager.ensureSessionStarted(this, additional,
+            boolean additional = restoreAdditionalMode();
+            MemberApiManager.ResultCallback<Long> afterSession =
                     new MemberApiManager.ResultCallback<Long>() {
                         @Override
                         public void onSuccess(Long data) {
-                            runOnUiThread(() -> {
-                                mission.setHrvDone();
-                                MemberApiManager.uploadHrv(HrvResultActivity.this, additional,
-                                        LastEcgResult.measuredAtMs,
-                                        new MemberApiManager.ResultCallback<Void>() {
-                                            @Override
-                                            public void onSuccess(Void ignored) {
-                                            }
+                            if (additional && !isDistinctEventSession(data)) {
+                                onError("추가 측정용 세션이 없습니다. 홈에서 추가 측정을 다시 눌러 주세요.");
+                                return;
+                            }
+                            MemberApiManager.uploadHrv(HrvResultActivity.this, additional,
+                                    LastEcgResult.measuredAtMs,
+                                    new MemberApiManager.ResultCallback<Void>() {
+                                        @Override
+                                        public void onSuccess(Void ignored) {
+                                            runOnUiThread(() -> {
+                                                mission.setHrvDone();
+                                                goEmaAfterHrvSaved(additional);
+                                            });
+                                        }
 
-                                            @Override
-                                            public void onError(String message) {
-                                                Toast.makeText(getApplicationContext(),
+                                        @Override
+                                        public void onError(String message) {
+                                            runOnUiThread(() -> {
+                                                navigating = false;
+                                                btnNext.setEnabled(true);
+                                                Toast.makeText(HrvResultActivity.this,
                                                         "심박변이도 서버 저장 실패: " + message,
                                                         Toast.LENGTH_LONG).show();
-                                            }
-                                        });
-                                Intent analysis = new Intent(HrvResultActivity.this, AnalysisResultActivity.class);
-                                analysis.putExtra(AnalysisResultActivity.EXTRA_FROM_HRV, true);
-                                analysis.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, additional);
-                                startActivity(analysis);
-                                finish();
-                            });
+                                            });
+                                        }
+                                    });
                         }
 
                         @Override
@@ -131,13 +140,28 @@ public class HrvResultActivity extends BaseSeniorActivity {
                             runOnUiThread(() -> {
                                 navigating = false;
                                 btnNext.setEnabled(true);
-                                // 401/403 은 MemberApiManager.forceRelogin 이 이미 로그인 화면으로 이동
                                 Toast.makeText(HrvResultActivity.this,
                                         message != null ? message : "세션을 시작하지 못했습니다.",
                                         Toast.LENGTH_LONG).show();
                             });
                         }
-                    });
+                    };
+            if (additional) {
+                MemberApiManager.ensureSessionStarted(this, true, afterSession);
+            } else {
+                // 오늘 정규 세션 ID 에 맞춰 올린다. 다른 세션에 올리면 추가 측정이 E00205 로 막힌다.
+                MemberApiManager.fetchToday(this, new MemberApiManager.ResultCallback<ApiModels.TodayResponse>() {
+                    @Override
+                    public void onSuccess(ApiModels.TodayResponse data) {
+                        MemberApiManager.ensureSessionStarted(HrvResultActivity.this, false, afterSession);
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        MemberApiManager.ensureSessionStarted(HrvResultActivity.this, false, afterSession);
+                    }
+                });
+            }
         } catch (Exception e) {
             Log.e(TAG, "confirm failed", e);
             navigating = false;
@@ -146,8 +170,41 @@ public class HrvResultActivity extends BaseSeniorActivity {
         }
     }
 
+    private boolean restoreAdditionalMode() {
+        MissionManager mission = new MissionManager(this);
+        boolean additional = getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, false)
+                || mission.isAdditionalMeasureMode();
+        if (additional) {
+            mission.setAdditionalMeasureMode(true);
+        }
+        return additional;
+    }
+
+    private boolean isDistinctEventSession(Long eventId) {
+        SessionManager sm = new SessionManager(this);
+        long id = eventId != null ? eventId : sm.getCurrentSessionId(true);
+        if (id <= 0) return false;
+        long mainId = sm.getCurrentSessionId(false);
+        long todayId = sm.getServerTodaySessionId();
+        if (mainId > 0 && id == mainId) return false;
+        if (todayId > 0 && id == todayId) return false;
+        return !sm.isPredictionSaved(id);
+    }
+
+    private void goEmaAfterHrvSaved(boolean additional) {
+        Intent ema = new Intent(this, EmaIntroActivity.class);
+        ema.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
+                additional ? EmaQuestionBank.SessionType.EVENT.name()
+                        : mapMainEmaSession().name());
+        ema.putExtra(AnalysisResultActivity.EXTRA_FROM_HRV, true);
+        ema.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, additional);
+        startActivity(ema);
+        finish();
+    }
+
     private void goRemeasure() {
         Intent i = new Intent(this, HrvGuideActivity.class);
+        i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, restoreAdditionalMode());
         i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(i);
         finish();
@@ -239,6 +296,15 @@ public class HrvResultActivity extends BaseSeniorActivity {
             out[i] = v * 0.5f;
         }
         return out;
+    }
+
+    private static EmaQuestionBank.SessionType mapMainEmaSession() {
+        switch (MissionManager.mainSessionByHour()) {
+            case AFTERNOON:
+                return EmaQuestionBank.SessionType.AFTERNOON;
+            default:
+                return EmaQuestionBank.SessionType.MORNING;
+        }
     }
 
     private void goDashboard() {

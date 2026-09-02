@@ -184,17 +184,17 @@ public final class ApiModels {
 
     public static final class FeedbackRequest {
         public final String matchResult;
-        /** 선택 필드 */
+        /** MISMATCH 일 때만 전송 */
         public final String reasonCode;
-        /** 필수. -1.2 ~ 1.2 */
-        public final float correctedValence;
-        /** 필수. -1.2 ~ 1.2 */
-        public final float correctedArousal;
+        /** MISMATCH 일 때만 전송. -1.2 ~ 1.2 */
+        public final Float correctedValence;
+        /** MISMATCH 일 때만 전송. -1.2 ~ 1.2 */
+        public final Float correctedArousal;
         /** 필수. epoch milliseconds */
         public final long occurredAt;
 
         public FeedbackRequest(String matchResult, String reasonCode,
-                               float correctedValence, float correctedArousal, long occurredAt) {
+                               Float correctedValence, Float correctedArousal, long occurredAt) {
             this.matchResult = matchResult;
             this.reasonCode = reasonCode;
             this.correctedValence = correctedValence;

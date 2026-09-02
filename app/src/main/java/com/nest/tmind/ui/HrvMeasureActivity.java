@@ -27,6 +27,7 @@ import com.nest.tmind.ecg.MeasureSessionStats;
 import com.nest.tmind.ecg.pref.AppVerifyStorage;
 import com.nest.tmind.ecg.MetricsManager;
 import com.nest.tmind.ecg.model.AppVerifyResult;
+import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.view.CircularProgressView;
 
 import java.util.Random;
@@ -99,6 +100,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_hrv_measure);
+        restoreAdditionalMode();
 
         ecgView = findViewById(R.id.ecgView);
         circularProgress = findViewById(R.id.circularProgress);
@@ -170,7 +172,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
                 Toast.LENGTH_SHORT).show();
 
         // 테스트도 측정 결과 화면으로 (분석은 3미션 완료 후)
-        startActivity(new Intent(this, HrvResultActivity.class));
+        startActivity(hrvResultIntent());
         finish();
     }
 
@@ -391,7 +393,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
                 .setMessage(boxMsg)
                 .setCancelable(false)
                 .setPositiveButton(R.string.confirm_result, (d, w) -> {
-                    startActivity(new Intent(this, HrvResultActivity.class));
+                    startActivity(hrvResultIntent());
                     finish();
                 })
                 .show();
@@ -438,5 +440,20 @@ public class HrvMeasureActivity extends BaseSeniorActivity
     @Override
     public void onHrRr(Integer hr, Integer hrvMs) {
         // 피드백: 신호 대기/양호 문구는 표시하지 않음
+    }
+
+    private boolean restoreAdditionalMode() {
+        boolean additional = getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, false)
+                || new MissionManager(this).isAdditionalMeasureMode();
+        if (additional) {
+            new MissionManager(this).setAdditionalMeasureMode(true);
+        }
+        return additional;
+    }
+
+    private Intent hrvResultIntent() {
+        Intent i = new Intent(this, HrvResultActivity.class);
+        i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, restoreAdditionalMode());
+        return i;
     }
 }

@@ -31,6 +31,7 @@ public class HrvGuideActivity extends BaseSeniorActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_hrv_guide);
         mission = new MissionManager(this);
+        restoreAdditionalMode();
 
         permLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(),
@@ -60,7 +61,7 @@ public class HrvGuideActivity extends BaseSeniorActivity {
     }
 
     private void skipHrvAndContinue() {
-        boolean event = mission.isAdditionalMeasureMode();
+        boolean event = restoreAdditionalMode();
         MemberApiManager.ensureSessionStarted(this, event, new MemberApiManager.ResultCallback<Long>() {
             @Override
             public void onSuccess(Long data) {
@@ -76,6 +77,7 @@ public class HrvGuideActivity extends BaseSeniorActivity {
                                         i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
                                                 event ? com.nest.tmind.util.EmaQuestionBank.SessionType.EVENT.name()
                                                         : mapMainEmaSession().name());
+                                        i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, event);
                                         startActivity(i);
                                         finish();
                                     }
@@ -93,6 +95,15 @@ public class HrvGuideActivity extends BaseSeniorActivity {
                         Toast.makeText(HrvGuideActivity.this, message, Toast.LENGTH_LONG).show());
             }
         });
+    }
+
+    private boolean restoreAdditionalMode() {
+        boolean additional = getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, false)
+                || mission.isAdditionalMeasureMode();
+        if (additional) {
+            mission.setAdditionalMeasureMode(true);
+        }
+        return additional;
     }
 
     private com.nest.tmind.util.EmaQuestionBank.SessionType mapMainEmaSession() {
@@ -131,7 +142,9 @@ public class HrvGuideActivity extends BaseSeniorActivity {
             return;
         }
 
-        startActivity(new Intent(this, HrvMeasureActivity.class));
+        Intent measure = new Intent(this, HrvMeasureActivity.class);
+        measure.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, restoreAdditionalMode());
+        startActivity(measure);
         finish();
     }
 }

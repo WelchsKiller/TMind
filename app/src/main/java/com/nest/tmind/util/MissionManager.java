@@ -136,6 +136,11 @@ public class MissionManager {
         updateStarsAfterProgress();
     }
 
+    public void clearHrv(Session s) {
+        sp.edit().putBoolean(k(s, "hrv"), false).commit();
+        updateStarsAfterProgress();
+    }
+
     public void setEmaDone() {
         setEmaDone(getActiveSession());
     }
@@ -247,13 +252,12 @@ public class MissionManager {
         setStarState(dayIndex, state);
     }
 
-    /** 연구 시작일 기준 0~6 (왼쪽부터 순차). 요일과 무관. */
+    /**
+     * 연구 시작일 기준 일차. 0~6 만 별로 기록되고 7 이상은 연구 기간을 벗어난 것이다.
+     * 6 으로 잘라내면 8일차 이후 진행이 계속 마지막 별을 덮어쓰므로 원값을 그대로 준다.
+     */
     public int studyStarIndex() {
-        SessionManager sm = new SessionManager(appCtx);
-        int idx = sm.getStudyDayIndex();
-        if (idx < 0) return 0;
-        if (idx > 6) return 6;
-        return idx;
+        return new SessionManager(appCtx).getStudyDayIndex();
     }
 
     /** @deprecated 별은 studyStarIndex 사용 */
@@ -264,6 +268,22 @@ public class MissionManager {
 
     public int getStarState(int dayIndex) {
         return sp.getInt(weekKey() + "_star_" + dayIndex, STAR_EMPTY);
+    }
+
+    /**
+     * 표시용 별 7칸. 어떤 날을 빠뜨렸든 항상 왼쪽부터 채워 보이도록, 빈 별을 건너뛰고
+     * 날짜 순서를 유지한 채 앞으로 당긴다. 일차별 기록 자체는 그대로 남는다.
+     */
+    public int[] getStarRow() {
+        int[] row = new int[7];
+        int filled = 0;
+        for (int day = 0; day < 7; day++) {
+            int state = getStarState(day);
+            if (state != STAR_EMPTY) {
+                row[filled++] = state;
+            }
+        }
+        return row;
     }
 
     private void setStarState(int dayIndex, int state) {
