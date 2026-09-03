@@ -68,15 +68,9 @@ public class FeedbackActivity extends BaseSeniorActivity {
     }
 
     private void goHomeAfterFeedback() {
-        boolean fromHrv = getIntent().getBooleanExtra(EXTRA_FROM_HRV, false);
-        boolean additional = getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false);
-        if (fromHrv && additional) {
-            startActivity(new Intent(this, VoiceDiaryActivity.class));
-        } else {
-            Intent i = new Intent(this, DashboardActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(i);
-        }
+        Intent i = new Intent(this, DashboardActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(i);
         finish();
     }
 }

@@ -73,13 +73,7 @@ public class HrvGuideActivity extends BaseSeniorActivity {
                                         SessionManager sm = new SessionManager(HrvGuideActivity.this);
                                         sm.setRemoteHrvStatus("SKIPPED");
                                         mission.setHrvDone();
-                                        Intent i = new Intent(HrvGuideActivity.this, EmaIntroActivity.class);
-                                        i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
-                                                event ? com.nest.tmind.util.EmaQuestionBank.SessionType.EVENT.name()
-                                                        : mapMainEmaSession().name());
-                                        i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, event);
-                                        startActivity(i);
-                                        finish();
+                                        AfterMissionSaved.afterHrv(HrvGuideActivity.this, event);
                                     }
 
                                     @Override
@@ -104,15 +98,6 @@ public class HrvGuideActivity extends BaseSeniorActivity {
             mission.setAdditionalMeasureMode(true);
         }
         return additional;
-    }
-
-    private com.nest.tmind.util.EmaQuestionBank.SessionType mapMainEmaSession() {
-        switch (MissionManager.mainSessionByHour()) {
-            case AFTERNOON:
-                return com.nest.tmind.util.EmaQuestionBank.SessionType.AFTERNOON;
-            default:
-                return com.nest.tmind.util.EmaQuestionBank.SessionType.MORNING;
-        }
     }
 
     private void requestBleAndStart() {

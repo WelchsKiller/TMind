@@ -162,6 +162,16 @@ public class MissionManager {
         updateStarsAfterProgress();
     }
 
+    /** /today 의 hrvDone · emaDone · diaryDone 을 그대로 반영한다. */
+    public void syncFromServer(Session s, boolean hrvDone, boolean emaDone, boolean diaryDone) {
+        sp.edit()
+                .putBoolean(k(s, "hrv"), hrvDone)
+                .putBoolean(k(s, "ema"), emaDone)
+                .putBoolean(k(s, "diary"), diaryDone)
+                .commit();
+        updateStarsAfterProgress();
+    }
+
     public void clearHrv() {
         sp.edit().putBoolean(k(getActiveSession(), "hrv"), false).apply();
     }

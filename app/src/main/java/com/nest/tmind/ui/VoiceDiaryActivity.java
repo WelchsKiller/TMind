@@ -1,7 +1,6 @@
 package com.nest.tmind.ui;
 
 import android.Manifest;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.MediaRecorder;
 import android.os.Build;
@@ -11,6 +10,7 @@ import android.os.Looper;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -20,6 +20,7 @@ import com.nest.tmind.R;
 import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.util.DataQueueManager;
 import com.nest.tmind.util.MissionManager;
+import com.nest.tmind.util.SessionManager;
 import com.nest.tmind.view.VoiceWaveformView;
 
 import org.json.JSONObject;
@@ -38,6 +39,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
     private File audioFile;
     private boolean recording;
     private boolean editMode;
+    private boolean uploading;
     private int elapsedSec;
     /** 실제 녹음 시작 시각. 서버 수신 시각과 구분해 보내야 한다. */
     private long recordedAtMs;
@@ -115,6 +117,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
     }
 
     private void toggleRecording() {
+        if (uploading) return;
         if (recording) stopRecording();
         else startRecording();
     }
@@ -170,25 +173,58 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
         }
 
         MissionManager mission = new MissionManager(this);
-        boolean additional = mission.isAdditionalMeasureMode();
-        if (!editMode) {
-            MemberApiManager.uploadVoiceDiary(this, additional, audioFile, elapsedSec, recordedAtMs);
+        boolean additional = getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, false)
+                || mission.isAdditionalMeasureMode();
+        if (additional) {
+            mission.setAdditionalMeasureMode(true);
         }
-        mission.setDiaryDone();
-        // setDiaryDone 후 다시 로드 (추가 완료 카운트 반영)
-        mission = new MissionManager(this);
+        if (editMode) {
+            AfterMissionSaved.goDashboard(this);
+            return;
+        }
 
-        if (!editMode && additional && mission.isSessionAllDone(MissionManager.Session.EVENT)) {
-            mission.clearEventMissions();
-            mission.setAdditionalMeasureMode(false);
-            MemberApiManager.clearCompletedSession(this, true);
-        } else if (!editMode && !additional) {
-            MemberApiManager.clearCompletedSession(this, false);
+        uploading = true;
+        btnRecord.setEnabled(false);
+        tvStatus.setText("음성 일기를 서버에 저장하는 중입니다.");
+        SessionManager sm = new SessionManager(this);
+        long sessionId = MemberApiManager.getCurrentSessionId(this, additional);
+        boolean priorDone = additional
+                ? (mission.isHrvDone(MissionManager.Session.EVENT)
+                && mission.isEmaDone(MissionManager.Session.EVENT))
+                : (sm.isRemoteHrvDone()
+                && (sm.isTodayEmaDone()
+                || sm.isRemoteEmaDone(sessionId)
+                || mission.isEmaDone()));
+        if (sessionId <= 0 || !priorDone) {
+            uploading = false;
+            btnRecord.setEnabled(true);
+            Toast.makeText(this, priorDone
+                            ? "세션이 없어 음성 일기를 저장하지 못했습니다."
+                            : getString(R.string.mission_need_ema_first),
+                    Toast.LENGTH_LONG).show();
+            return;
         }
-        Intent i = new Intent(this, DashboardActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(i);
-        finish();
+        MemberApiManager.uploadVoiceDiary(this, additional, audioFile, elapsedSec, recordedAtMs,
+                new MemberApiManager.ResultCallback<Void>() {
+                    @Override
+                    public void onSuccess(Void ignored) {
+                        runOnUiThread(() -> {
+                            new MissionManager(VoiceDiaryActivity.this).setDiaryDone();
+                            AfterMissionSaved.afterDiary(VoiceDiaryActivity.this, additional);
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(() -> {
+                            uploading = false;
+                            btnRecord.setEnabled(true);
+                            Toast.makeText(VoiceDiaryActivity.this,
+                                    message != null ? message : "음성 일기 저장에 실패했습니다.",
+                                    Toast.LENGTH_LONG).show();
+                        });
+                    }
+                });
     }
 
     private final Runnable timerRunnable = new Runnable() {

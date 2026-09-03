@@ -31,8 +31,8 @@ public class DashboardActivity extends BaseSeniorActivity {
     private LinearLayout starRow;
     private ProgressBar progressBar;
     private View btnWeeklyTrend;
-    private boolean serverEventActive = true;
-    private int serverParticipatedDays = -1;
+    private ApiModels.TodayResponse today;
+    private ApiModels.ParticipationResponse participation;
 
     private static final int SECRET_TAP_COUNT = 5;
     private static final long SECRET_TAP_WINDOW_MS = 2000L;
@@ -86,19 +86,16 @@ public class DashboardActivity extends BaseSeniorActivity {
         });
 
         session.saveScreen("dashboard");
+        applyLatestTodayIfAny();
         syncServerState();
-        refreshUi();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         mission = new MissionManager(this);
-        // 추가 측정은 Event HRV 를 시작하기 전(완료 0)에도 모드를 유지해야 한다.
-        // 여기서 끄면 확인 버튼이 정규 세션으로 업로드해서 E00210 이 난다.
-        mission.recalcStars();
+        applyLatestTodayIfAny();
         syncServerState();
-        refreshUi();
     }
 
     private void confirmNewParticipant() {
@@ -143,7 +140,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void confirmExitIfMissionsIncomplete() {
-        if (mission.isAllDone() || session.isStudyEnded()) {
+        if (isTodayAllDone() || session.isStudyEnded()) {
             finishAffinity();
             return;
         }
@@ -155,12 +152,8 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void openAdditional() {
-        if (!serverEventActive) {
-            Toast.makeText(this, "추가 측정은 현재 사용할 수 없습니다.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (!mission.canStartAdditional() && !mission.hasEventInProgress()) {
-            Toast.makeText(this, R.string.additional_measure_max, Toast.LENGTH_SHORT).show();
+        if (!isEventAvailable()) {
+            Toast.makeText(this, additionalUnavailableMessage(), Toast.LENGTH_SHORT).show();
             return;
         }
         MemberApiManager.fetchToday(this, new MemberApiManager.ResultCallback<ApiModels.TodayResponse>() {
@@ -168,6 +161,11 @@ public class DashboardActivity extends BaseSeniorActivity {
             public void onSuccess(ApiModels.TodayResponse data) {
                 runOnUiThread(() -> {
                     applyTodayResponse(data);
+                    if (!isEventAvailable()) {
+                        Toast.makeText(DashboardActivity.this,
+                                additionalUnavailableMessage(), Toast.LENGTH_SHORT).show();
+                        return;
+                    }
                     startEventSession();
                 });
             }
@@ -205,7 +203,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void proceedAdditionalMeasure() {
-        // 추가 측정: 심박변이도 → 마음상태 → 마음일기
+        // 추가 측정도 심박 → 설문 → 일기 순서.
         MissionManager.Session event = MissionManager.Session.EVENT;
         if (!mission.isHrvDone(event)) {
             openHrv();
@@ -219,21 +217,10 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
     }
 
-    private static boolean isTodayHrvComplete(ApiModels.TodayResponse data) {
-        if (data == null) return false;
-        if (Boolean.TRUE.equals(data.hrvDone)) return true;
-        String status = data.hrvStatus;
-        return status != null && ("VALID".equalsIgnoreCase(status) || "SKIPPED".equalsIgnoreCase(status));
-    }
-
-    /** 오늘 오전/오후 중 심박변이도 미션을 한 번이라도 완료하면 추가 측정 가능 */
-    private boolean isAdditionalUnlocked() {
-        return session.isRemoteHrvDone();
-    }
-
     private void onHrvClick() {
         mission.setAdditionalMeasureMode(false);
-        if (session.isRemoteHrvValid()) {
+        // VALID 만 측정 완료. SKIPPED 등 VALID 가 아니면 재측정.
+        if (isHrvValid()) {
             Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
         } else {
             openHrv();
@@ -242,11 +229,11 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void onEmaClick() {
         mission.setAdditionalMeasureMode(false);
-        if (mission.isEmaDone()) {
+        if (isEmaDone()) {
             Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (!canOpenFollowUpMission()) {
+        if (!isHrvStageDone()) {
             Toast.makeText(this, R.string.mission_need_hrv_first, Toast.LENGTH_LONG).show();
             return;
         }
@@ -255,29 +242,19 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void onDiaryClick() {
         mission.setAdditionalMeasureMode(false);
-        if (mission.isDiaryDone()) {
+        if (isDiaryDone()) {
             Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (!canOpenFollowUpMission()) {
+        if (!isHrvStageDone()) {
             Toast.makeText(this, R.string.mission_need_hrv_first, Toast.LENGTH_LONG).show();
             return;
         }
-        if (!mission.isEmaDone()) {
+        if (!isEmaDone()) {
             Toast.makeText(this, R.string.mission_need_ema_first, Toast.LENGTH_LONG).show();
             return;
         }
         openDiary();
-    }
-
-    private boolean canOpenFollowUpMission() {
-        boolean event = mission.isAdditionalMeasureMode();
-        MissionManager.Session s = event ? MissionManager.Session.EVENT : MissionManager.mainSessionByHour();
-        if (mission.isHrvDone(s)) {
-            return true;
-        }
-        long sessionId = MemberApiManager.getCurrentSessionId(this, event);
-        return sessionId > 0 && session.isRemoteHrvDone();
     }
 
     private void openHrv() {
@@ -290,40 +267,51 @@ public class DashboardActivity extends BaseSeniorActivity {
         boolean event = mission.isAdditionalMeasureMode();
         Intent i = new Intent(this, EmaIntroActivity.class);
         i.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE, mapEmaSession().name());
+        i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, event);
         startActivity(i);
     }
 
     private EmaQuestionBank.SessionType mapEmaSession() {
-        switch (mission.getActiveSession()) {
+        if (mission.isAdditionalMeasureMode()) {
+            return EmaQuestionBank.SessionType.EVENT;
+        }
+        if (today != null && today.currentType != null) {
+            switch (today.currentType.trim().toUpperCase()) {
+                case "PM":
+                case "AFTERNOON":
+                    return EmaQuestionBank.SessionType.AFTERNOON;
+                default:
+                    return EmaQuestionBank.SessionType.MORNING;
+            }
+        }
+        switch (MissionManager.mainSessionByHour()) {
             case AFTERNOON:
                 return EmaQuestionBank.SessionType.AFTERNOON;
-            case EVENT:
-                return EmaQuestionBank.SessionType.EVENT;
             default:
                 return EmaQuestionBank.SessionType.MORNING;
         }
     }
 
     private void openDiary() {
-        startActivity(new Intent(this, VoiceDiaryActivity.class));
+        Intent i = new Intent(this, VoiceDiaryActivity.class);
+        i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, mission.isAdditionalMeasureMode());
+        startActivity(i);
     }
 
     private void refreshUi() {
-        // 메인 카드는 항상 오전/오후 기준 (추가 측정 진행 중에도)
-        MissionManager.Session active = MissionManager.mainSessionByHour();
-        int done = mission.getCompletedCount(active);
-        tvProgress.setText(getString(R.string.mission_progress_session,
-                mission.sessionLabel(active), done));
-        progressBar.setMax(3);
-        progressBar.setProgress(done);
+        String label = sessionLabelFromToday();
+        int done = todayCompletedCount();
+        int total = todayTotalCount();
+        tvProgress.setText(getString(R.string.mission_progress_session, label, done, total));
+        progressBar.setMax(total);
+        progressBar.setProgress(Math.min(done, total));
 
-        applyCardState(cardHrv, session.isRemoteHrvDone(), R.drawable.bg_mission_card_active);
-        applyCardState(cardEma, mission.isEmaDone(active), R.drawable.bg_mission_card_ema);
-        applyCardState(cardDiary, mission.isDiaryDone(active), R.drawable.bg_mission_card_diary);
+        applyCardState(cardHrv, isHrvStageDone(), R.drawable.bg_mission_card_active);
+        applyCardState(cardEma, isEmaDone(), R.drawable.bg_mission_card_ema);
+        applyCardState(cardDiary, isDiaryDone(), R.drawable.bg_mission_card_diary);
 
-        // 완료 여부는 체크만 표시 — 부제목은 고정(일관). 다만 HRV 무효/건너뛰기면 재측정 안내
         TextView hrvSub = cardHrv.findViewById(R.id.tvMissionSub);
-        if (session.isRemoteHrvDone() && !session.isRemoteHrvValid()) {
+        if (isHrvStageDone() && !isHrvValid()) {
             hrvSub.setText("다시 측정해 주세요");
         } else {
             hrvSub.setText(R.string.mission_hrv_sub);
@@ -331,38 +319,103 @@ public class DashboardActivity extends BaseSeniorActivity {
         ((TextView) cardEma.findViewById(R.id.tvMissionSub)).setText(R.string.mission_ema_sub);
         ((TextView) cardDiary.findViewById(R.id.tvMissionSub)).setText(R.string.mission_diary_active);
 
-        btnWeeklyTrend.setVisibility(
-                serverParticipatedDays >= 7 ? View.VISIBLE : View.GONE);
+        btnWeeklyTrend.setVisibility(participatedDays() >= 7 ? View.VISIBLE : View.GONE);
 
         refreshAdditionalCard();
         renderStars();
     }
 
     private void refreshAdditionalCard() {
-        boolean unlocked = isAdditionalUnlocked();
-        boolean canMore = serverEventActive && (mission.canStartAdditional() || mission.hasEventInProgress());
-        boolean active = unlocked && canMore;
+        boolean active = isEventAvailable();
         cardAdditional.setEnabled(active);
         cardAdditional.setClickable(active);
         cardAdditional.setAlpha(active ? 1f : 0.45f);
-        String guide = session.getEventGuideText();
-        if (!unlocked) {
-            tvAdditionalSub.setText(R.string.additional_measure_locked);
-        } else if (!serverEventActive) {
-            tvAdditionalSub.setText("추가 측정은 현재 사용할 수 없습니다.");
-        } else if (!canMore) {
-            tvAdditionalSub.setText(R.string.additional_measure_max);
-        } else if (guide != null && !guide.trim().isEmpty()) {
+        String guide = today != null ? today.eventGuideText : null;
+        if (guide != null && !guide.trim().isEmpty()) {
             tvAdditionalSub.setText(guide.trim());
+        } else if (active) {
+            tvAdditionalSub.setText(R.string.additional_measure_sub);
         } else {
-            int n = mission.getAdditionalCompleteCount();
-            tvAdditionalSub.setText(getString(R.string.additional_measure_sub_count,
-                    n, MissionManager.MAX_ADDITIONAL_PER_DAY));
+            tvAdditionalSub.setText(additionalUnavailableMessage());
         }
         if (active) {
             cardAdditional.setBackgroundResource(R.drawable.bg_btn_outline);
         } else {
             cardAdditional.setBackgroundResource(R.drawable.bg_mission_card_completed);
+        }
+    }
+
+    private String additionalUnavailableMessage() {
+        if (today != null && !today.eventActive) {
+            return getString(R.string.additional_measure_admin_off);
+        }
+        return getString(R.string.additional_measure_unavailable);
+    }
+
+    private boolean isHrvStageDone() {
+        return today != null && Boolean.TRUE.equals(today.hrvDone);
+    }
+
+    private boolean isHrvValid() {
+        return today != null && today.hrvStatus != null
+                && "VALID".equalsIgnoreCase(today.hrvStatus.trim());
+    }
+
+    private boolean isEmaDone() {
+        return today != null && Boolean.TRUE.equals(today.emaDone);
+    }
+
+    private boolean isDiaryDone() {
+        return today != null && Boolean.TRUE.equals(today.diaryDone);
+    }
+
+    private boolean isEventAvailable() {
+        return today != null && Boolean.TRUE.equals(today.eventAvailable);
+    }
+
+    private boolean isTodayAllDone() {
+        return isHrvStageDone() && isEmaDone() && isDiaryDone();
+    }
+
+    private int todayCompletedCount() {
+        if (today == null) return 0;
+        int n = 0;
+        if (Boolean.TRUE.equals(today.hrvDone)) n++;
+        if (Boolean.TRUE.equals(today.emaDone)) n++;
+        if (Boolean.TRUE.equals(today.diaryDone)) n++;
+        return n;
+    }
+
+    private int todayTotalCount() {
+        if (today != null && today.totalCount > 0) return today.totalCount;
+        return 3;
+    }
+
+    private int participatedDays() {
+        if (today != null && today.participatedDays != null) return today.participatedDays;
+        if (participation != null && participation.period != null) {
+            return participation.period.participatedDays;
+        }
+        return 0;
+    }
+
+    private String sessionLabelFromToday() {
+        if (today == null || today.currentType == null || today.currentType.trim().isEmpty()) {
+            return getString(R.string.session_today);
+        }
+        switch (today.currentType.trim().toUpperCase()) {
+            case "PM":
+            case "AFTERNOON":
+                return getString(R.string.session_afternoon);
+            case "AM":
+            case "MORNING":
+                return getString(R.string.session_morning);
+            case "BASELINE":
+                return getString(R.string.session_baseline);
+            case "FOLLOWUP":
+                return getString(R.string.session_followup);
+            default:
+                return today.currentType.trim();
         }
     }
 
@@ -384,11 +437,10 @@ public class DashboardActivity extends BaseSeniorActivity {
                     @Override
                     public void onSuccess(ApiModels.ParticipationResponse data) {
                         runOnUiThread(() -> {
-                            if (data != null && data.period != null) {
-                                serverParticipatedDays = data.period.participatedDays;
-                                btnWeeklyTrend.setVisibility(
-                                        serverParticipatedDays >= 7 ? View.VISIBLE : View.GONE);
-                            }
+                            participation = data;
+                            btnWeeklyTrend.setVisibility(
+                                    participatedDays() >= 7 ? View.VISIBLE : View.GONE);
+                            renderStars();
                         });
                     }
 
@@ -399,24 +451,24 @@ public class DashboardActivity extends BaseSeniorActivity {
                 });
     }
 
+    /** 심박·설문 저장 직후 받아 둔 /today 가 있으면, 재조회가 끝나기 전에 그 값으로 먼저 그린다. */
+    private void applyLatestTodayIfAny() {
+        ApiModels.TodayResponse cached = MemberApiManager.lastToday();
+        if (cached != null) {
+            applyTodayResponse(cached);
+        } else {
+            refreshUi();
+        }
+    }
+
     private void applyTodayResponse(ApiModels.TodayResponse data) {
         if (data == null) return;
-        serverEventActive = data.eventActive;
-        if (data.participatedDays != null) {
-            serverParticipatedDays = data.participatedDays;
-        }
+        today = data;
         MissionManager.Session main = mapCurrentType(data.currentType);
-        if (isTodayHrvComplete(data)) {
-            mission.setHrvDone(main);
-        } else {
-            mission.clearHrv(main);
-        }
-        if (Boolean.TRUE.equals(data.emaDone)) {
-            mission.setEmaDone(main);
-        }
-        if (Boolean.TRUE.equals(data.diaryDone)) {
-            mission.setDiaryDone(main);
-        }
+        mission.syncFromServer(main,
+                Boolean.TRUE.equals(data.hrvDone),
+                Boolean.TRUE.equals(data.emaDone),
+                Boolean.TRUE.equals(data.diaryDone));
         if (data.missedType != null && !data.missedType.trim().isEmpty()) {
             tvGreeting.setText(getString(R.string.dashboard_missed_session, data.missedType));
         } else {
@@ -445,7 +497,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         float d = getResources().getDisplayMetrics().density;
         int size = (int) (36 * d);
         int pad = (int) (3 * d);
-        int[] states = mission.getStarRow();
+        int[] states = starStatesFromParticipation();
         for (int i = 0; i < states.length; i++) {
             ImageView iv = new ImageView(this);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
@@ -468,6 +520,43 @@ public class DashboardActivity extends BaseSeniorActivity {
             }
             starRow.addView(iv);
         }
+    }
+
+    /** 참여 현황 days 의 amDone / pmDone / eventDone 으로 별 7칸을 채운다. */
+    private int[] starStatesFromParticipation() {
+        int[] row = new int[7];
+        if (participation == null || participation.period == null
+                || participation.period.days == null || participation.period.days.isEmpty()) {
+            return row;
+        }
+        java.util.List<ApiModels.DayStatus> days = new java.util.ArrayList<>(participation.period.days);
+        java.util.Collections.sort(days, (a, b) -> {
+            String da = a != null && a.date != null ? a.date : "";
+            String db = b != null && b.date != null ? b.date : "";
+            return da.compareTo(db);
+        });
+        int filled = 0;
+        for (int i = 0; i < days.size() && filled < 7; i++) {
+            int state = starStateFromDay(days.get(i));
+            if (state != MissionManager.STAR_EMPTY) {
+                row[filled++] = state;
+            }
+        }
+        return row;
+    }
+
+    private static int starStateFromDay(ApiModels.DayStatus day) {
+        if (day == null) return MissionManager.STAR_EMPTY;
+        boolean am = day.amDone;
+        boolean pm = day.pmDone;
+        boolean bonus = day.eventDone;
+        if (am && pm) {
+            return bonus ? MissionManager.STAR_BONUS : MissionManager.STAR_FULL;
+        }
+        if (am ^ pm) {
+            return bonus ? MissionManager.STAR_HALF_BONUS : MissionManager.STAR_HALF;
+        }
+        return MissionManager.STAR_EMPTY;
     }
 
     private void setupMissionCard(View card, int iconRes, int titleRes, int subRes) {

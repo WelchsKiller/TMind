@@ -45,7 +45,31 @@ public final class MemberApiManager {
     private static final long CRYPTO_RETRY_BACKOFF_MS = 6L * 60L * 60L * 1000L;
     /** E00503/E00504 는 한 번만 재전송한다. 원인이 그대로면 반복해도 같은 결과다. */
     private static final int HRV_MAX_ATTEMPTS = 2;
+    private static volatile ApiModels.TodayResponse lastToday;
+
     private MemberApiManager() {
+    }
+
+    public static ApiModels.TodayResponse lastToday() {
+        return lastToday;
+    }
+
+    /** 심박·설문·일기 저장 성공 후, 그 시점의 /today 로 eventAvailable 등을 다시 받는다. */
+    public static void refreshTodayAfterSave(Context context) {
+        if (context == null) return;
+        Log.i("TMindToday", "refresh /today after save");
+        fetchToday(context.getApplicationContext(), new ResultCallback<ApiModels.TodayResponse>() {
+            @Override
+            public void onSuccess(ApiModels.TodayResponse data) {
+                Log.i("TMindToday", "refresh /today after save ok eventAvailable="
+                        + (data != null ? data.eventAvailable : null));
+            }
+
+            @Override
+            public void onError(String message) {
+                Log.w("TMindToday", "refresh /today after save failed: " + message);
+            }
+        });
     }
 
     public interface ResultCallback<T> {
@@ -172,42 +196,104 @@ public final class MemberApiManager {
                 }
                 ApiModels.ApiResponse<ApiModels.TodayResponse> body = response.body();
                 if (!response.isSuccessful() || body == null || !body.isSuccess()) {
-                    callback.onError(errorMessage(body, response.code(), "오늘 세션 정보를 불러오지 못했습니다."));
+                    if (callback != null) {
+                        callback.onError(errorMessage(body, response.code(), "오늘 세션 정보를 불러오지 못했습니다."));
+                    }
                     return;
                 }
                 SessionManager session = new SessionManager(context);
+                lastToday = body.data;
                 session.setRemoteEventActive(body.data.eventActive);
-                if (body.data.hrvStatus != null && !body.data.hrvStatus.trim().isEmpty()) {
-                    session.setRemoteHrvStatus(body.data.hrvStatus);
-                } else if (Boolean.TRUE.equals(body.data.hrvDone)) {
-                    session.setRemoteHrvStatus("VALID");
-                } else {
-                    // 다른 세션에 올린 VALID 가 남아 있으면 추가 측정이 잘못 열린다.
-                    session.setRemoteHrvStatus("");
-                }
-                Log.i(TAG, "today " + GSON.toJson(body.data));
-                session.setServerTodaySessionId(
-                        body.data.currentSessionId != null ? body.data.currentSessionId : 0L);
-                if (body.data.currentSessionId != null && body.data.currentSessionId > 0) {
-                    // 추가(Event) 세션은 오늘 정규 세션의 HRV 가 끝난 뒤에만 열린다.
-                    // HRV 를 다른 sessionId 에 올리면 서버는 오늘 측정을 안 한 것으로 본다.
-                    session.setCurrentSessionId(false, body.data.currentSessionId);
-                }
+                session.setRemoteEventAvailable(resolveEventAvailable(body.data));
+                logToday(body.data);
+                applyTodaySessionState(session, body.data);
                 session.setEventGuideText(body.data.eventGuideText);
                 session.setServerDate(body.data.serverDate);
                 warnOnDateSkew(context, body.data.serverDate);
-                if (Boolean.TRUE.equals(body.data.emaDone)
-                        && body.data.currentSessionId != null && body.data.currentSessionId > 0) {
-                    session.setRemoteEmaDone(body.data.currentSessionId);
-                }
-                callback.onSuccess(body.data);
+                if (callback != null) callback.onSuccess(body.data);
             }
 
             @Override
             public void onFailure(Call<ApiModels.ApiResponse<ApiModels.TodayResponse>> call, Throwable t) {
-                callback.onError("오늘 세션 정보를 불러오지 못했습니다.");
+                if (callback != null) {
+                    callback.onError("오늘 세션 정보를 불러오지 못했습니다.");
+                }
             }
         });
+    }
+
+    public static boolean isTodayHrvValid(ApiModels.TodayResponse data) {
+        return data != null && data.hrvStatus != null
+                && "VALID".equalsIgnoreCase(data.hrvStatus.trim());
+    }
+
+    public static boolean isTodayHrvStageDone(ApiModels.TodayResponse data) {
+        return data != null && Boolean.TRUE.equals(data.hrvDone);
+    }
+
+    /** 추가 측정 버튼은 eventAvailable 만 본다. eventActive 는 관리자 on/off. */
+    public static boolean resolveEventAvailable(ApiModels.TodayResponse data) {
+        return data != null && Boolean.TRUE.equals(data.eventAvailable);
+    }
+
+    public static void logToday(ApiModels.TodayResponse data) {
+        if (data == null) {
+            Log.i("TMindToday", "GET /today data=null");
+            return;
+        }
+        Log.i("TMindToday", "GET /today"
+                + " currentType=" + data.currentType
+                + " currentSessionId=" + data.currentSessionId
+                + " hrvDone=" + data.hrvDone
+                + " hrvStatus=" + data.hrvStatus
+                + " emaDone=" + data.emaDone
+                + " diaryDone=" + data.diaryDone
+                + " eventActive=" + data.eventActive
+                + " eventAvailable=" + data.eventAvailable
+                + " missedType=" + data.missedType
+                + " completedCount=" + data.completedCount
+                + " totalCount=" + data.totalCount
+                + " participatedDays=" + data.participatedDays
+                + " serverDate=" + data.serverDate
+                + " eventGuideText=" + data.eventGuideText);
+        Log.i("TMindToday", "GET /today json=" + GSON.toJson(data));
+    }
+
+    /**
+     * /today 값을 그대로 반영한다. currentSessionId 가 있으면 그 세션을 이어가고,
+     * 없으면 다음 시작 때 POST /session 한다. 심박 완료·재측정 여부는 hrvDone / hrvStatus.
+     */
+    private static void applyTodaySessionState(SessionManager session, ApiModels.TodayResponse data) {
+        if (data == null) return;
+        String prevDate = session.getServerDate();
+        String newDate = data.serverDate != null ? data.serverDate.trim() : "";
+        if (!newDate.isEmpty() && !prevDate.isEmpty() && !newDate.equals(prevDate)) {
+            Log.i(TAG, "server date changed " + prevDate + " -> " + newDate
+                    + ", drop cached sessions");
+            session.clearDayScopedServerState();
+        }
+
+        long todaySid = data.currentSessionId != null ? data.currentSessionId : 0L;
+        session.setServerTodaySessionId(todaySid);
+        if (todaySid > 0) {
+            session.setCurrentSessionId(false, todaySid);
+        } else {
+            session.clearCurrentSession(false);
+        }
+
+        if (data.hrvStatus != null && !data.hrvStatus.trim().isEmpty()) {
+            session.setRemoteHrvStatus(data.hrvStatus.trim());
+        } else if (Boolean.TRUE.equals(data.hrvDone)) {
+            session.setRemoteHrvStatus("SKIPPED");
+        } else {
+            session.setRemoteHrvStatus("");
+        }
+        session.setTodayEmaDone(Boolean.TRUE.equals(data.emaDone));
+        session.setTodayDiaryDone(Boolean.TRUE.equals(data.diaryDone));
+
+        if (Boolean.TRUE.equals(data.emaDone) && todaySid > 0) {
+            session.setRemoteEmaDone(todaySid);
+        }
     }
 
     /**
@@ -323,11 +409,6 @@ public final class MemberApiManager {
                 callback.onSuccess(todayId);
                 return;
             }
-            long cachedMain = session.getCurrentSessionId(false);
-            if (cachedMain > 0) {
-                callback.onSuccess(cachedMain);
-                return;
-            }
             postStartSession(context, session, false, callback);
             return;
         }
@@ -437,9 +518,9 @@ public final class MemberApiManager {
             reportHrvFailure(context, callback, "세션이 없어 심박변이도를 전송하지 못했습니다.");
             return;
         }
-        if (session.isPredictionSaved(sessionId) || (event && !isUsableEventSession(session, sessionId))) {
+        if (event && !isUsableEventSession(session, sessionId)) {
             reportHrvFailure(context, callback,
-                    "예측이 끝난 세션에는 측정을 다시 저장할 수 없습니다. 홈에서 추가 측정을 다시 시작해 주세요.");
+                    "추가 측정용 세션이 없습니다. 홈에서 추가 측정을 다시 시작해 주세요.");
             return;
         }
         ensureCryptoPublicKey(context, new Continuation() {
@@ -513,6 +594,7 @@ public final class MemberApiManager {
                         Log.d(TAG, "uploadHrv ok: sessionId=" + sessionId);
                         new SessionManager(context).setRemoteHrvStatus("VALID");
                         if (callback != null) callback.onSuccess(null);
+                        else refreshTodayAfterSave(context);
                     }
 
                     @Override
@@ -615,6 +697,7 @@ public final class MemberApiManager {
                         }
                         new SessionManager(context).setRemoteHrvStatus("SKIPPED");
                         if (callback != null) callback.onSuccess(null);
+                        else refreshTodayAfterSave(context);
                     }
 
                     @Override
@@ -631,12 +714,15 @@ public final class MemberApiManager {
         savePrediction(context, event, valence, arousal, null);
     }
 
-    /** HRV·EMA 저장을 기다리며 보류해 둔 예측을 보낸다. EMA 제출 성공 직후 호출. */
+    /** HRV·EMA·일기 저장을 기다리며 보류해 둔 예측을 보낸다. 일기 업로드 성공 직후 호출. */
     private static void flushPendingPrediction(Context context) {
         SessionManager session = new SessionManager(context);
         long pending = session.getPredictionPendingSessionId();
         if (pending <= 0) return;
-        if (!session.isRemoteHrvDone() || !session.isRemoteEmaDone(pending)) return;
+        if (!session.isRemoteHrvDone() || !session.isRemoteEmaDone(pending)
+                || !session.isTodayDiaryDone()) {
+            return;
+        }
         session.clearPredictionPending();
         Log.i(TAG, "sending deferred prediction sessionId=" + pending);
         savePrediction(context, session.getCurrentSessionId(true) == pending,
@@ -661,7 +747,7 @@ public final class MemberApiManager {
             if (callback != null) callback.onSuccess(null);
             return;
         }
-        // 서버 순서: HRV(또는 skip) → EMA → 예측. HRV 직후 보내면 E00207 이다.
+        // 서버 순서: HRV(또는 skip) → EMA → 일기 → 예측. 일기 전이면 E00212 이다.
         if (!session.isRemoteHrvDone()) {
             session.setPredictionPending(sessionId);
             Log.i(TAG, "savePrediction deferred until HRV saved. sessionId=" + sessionId);
@@ -675,6 +761,14 @@ public final class MemberApiManager {
             Log.i(TAG, "savePrediction deferred until EMA submitted. sessionId=" + sessionId);
             if (callback != null) {
                 callback.onError("마음상태 설문을 먼저 제출해야 합니다.");
+            }
+            return;
+        }
+        if (!session.isTodayDiaryDone()) {
+            session.setPredictionPending(sessionId);
+            Log.i(TAG, "savePrediction deferred until diary uploaded. sessionId=" + sessionId);
+            if (callback != null) {
+                callback.onError("마음일기를 먼저 저장해야 합니다.");
             }
             return;
         }
@@ -701,13 +795,14 @@ public final class MemberApiManager {
                                     : httpErrorMessage(response, raw, fallback);
                             Log.w(TAG, "savePrediction failed: http=" + response.code()
                                     + " code=" + code + " detail=" + detail);
-                            // E00206 = HRV 미저장, E00207 = EMA 미제출. 선행 단계가 끝나면 재전송한다.
-                            if ("E00206".equals(code) || "E00207".equals(code)) {
+                            // E00206 = HRV 미저장, E00207 = EMA 미제출, E00212 = 일기 미저장.
+                            if ("E00206".equals(code) || "E00207".equals(code) || "E00212".equals(code)) {
                                 session.setPredictionPending(sessionId);
                             }
                             if (callback != null) {
                                 callback.onError(detail);
-                            } else if (!"E00206".equals(code) && !"E00207".equals(code)) {
+                            } else if (!"E00206".equals(code) && !"E00207".equals(code)
+                                    && !"E00212".equals(code)) {
                                 showToast(context, "예측 저장 실패: " + detail);
                             }
                             return;
@@ -715,6 +810,7 @@ public final class MemberApiManager {
                         Log.d(TAG, "savePrediction ok: sessionId=" + sessionId);
                         session.setPredictionSaved(sessionId);
                         session.clearPredictionPending();
+                        refreshTodayAfterSave(context);
                         if (callback != null) callback.onSuccess(null);
                     }
 
@@ -864,7 +960,7 @@ public final class MemberApiManager {
                                           ResultCallback<List<ApiModels.QuestionResponse>> callback) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0) {
-            callback.onError("세션이 없습니다. HRV 측정 또는 건너뛰기를 먼저 완료해 주세요.");
+            callback.onError("세션이 없습니다. 심박변이도 측정 또는 건너뛰기를 먼저 완료해 주세요.");
             return;
         }
         Log.d(TAG, "fetchEmaQuestions sessionId=" + sessionId + " event=" + event);
@@ -1039,9 +1135,11 @@ public final class MemberApiManager {
                             return;
                         }
                         Log.d(TAG, "submitEma ok: sessionId=" + sessionId);
-                        new SessionManager(context).setRemoteEmaDone(sessionId);
-                        flushPendingPrediction(context);
+                        SessionManager session = new SessionManager(context);
+                        session.setRemoteEmaDone(sessionId);
+                        session.setTodayEmaDone(true);
                         if (callback != null) callback.onSuccess(null);
+                        else refreshTodayAfterSave(context);
                     }
 
                     @Override
@@ -1056,10 +1154,23 @@ public final class MemberApiManager {
 
     public static void uploadVoiceDiary(Context context, boolean event, File audioFile,
                                         int durationSec, long recordedAtMs) {
+        uploadVoiceDiary(context, event, audioFile, durationSec, recordedAtMs, null);
+    }
+
+    public static void uploadVoiceDiary(Context context, boolean event, File audioFile,
+                                        int durationSec, long recordedAtMs,
+                                        ResultCallback<Void> callback) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
-        if (sessionId <= 0 || audioFile == null || !audioFile.exists()) return;
+        if (sessionId <= 0 || audioFile == null || !audioFile.exists()) {
+            String msg = "세션 또는 녹음 파일이 없어 음성 일기를 전송하지 못했습니다.";
+            if (callback != null) callback.onError(msg);
+            else showToast(context, msg);
+            return;
+        }
         if (durationSec <= 0) {
-            showToast(context, "녹음 길이가 0초라 음성 일기를 전송하지 못했습니다.");
+            String msg = "녹음 길이가 0초라 음성 일기를 전송하지 못했습니다.";
+            if (callback != null) callback.onError(msg);
+            else showToast(context, msg);
             return;
         }
         // 서버 허용 범위: 0 초과 200 이하
@@ -1070,7 +1181,7 @@ public final class MemberApiManager {
         Log.d(TAG, "uploadVoiceDiary sessionId=" + sessionId + " durationSec=" + duration
                 + " recordedAt=" + recordedAt + " audioBytes=" + audioFile.length());
         MemberApiClient.service(context).uploadVoiceDiary(sessionId, duration, recordedAt, part)
-                .enqueue(new LoggingCallback(context, "음성 일기 업로드"));
+                .enqueue(new LoggingCallback(context, "음성 일기 업로드", callback));
     }
 
     public static void registerFcmToken(Context context, String token) {
@@ -1398,10 +1509,16 @@ public final class MemberApiManager {
     private static final class LoggingCallback implements Callback<ApiModels.ApiResponse<JsonElement>> {
         private final String label;
         private final Context context;
+        private final ResultCallback<Void> callback;
 
         LoggingCallback(Context context, String label) {
+            this(context, label, null);
+        }
+
+        LoggingCallback(Context context, String label, ResultCallback<Void> callback) {
             this.label = label;
             this.context = context;
+            this.callback = callback;
         }
 
         @Override
@@ -1414,6 +1531,10 @@ public final class MemberApiManager {
             // HTTP 성공 + 본문 없음은 정상 처리 (서버가 빈 본문을 주는 경우가 있음)
             boolean failed = !response.isSuccessful() || (body != null && !body.isSuccess());
             if (!failed) {
+                new SessionManager(context).setTodayDiaryDone(true);
+                flushPendingPrediction(context);
+                if (callback != null) callback.onSuccess(null);
+                else refreshTodayAfterSave(context);
                 return;
             }
             String fallback = label + " 전송에 실패했습니다.";
@@ -1423,6 +1544,10 @@ public final class MemberApiManager {
             Log.w(TAG, label + " failed: http=" + response.code()
                     + " url=" + call.request().url()
                     + " detail=" + detail);
+            if (callback != null) {
+                callback.onError(detail);
+                return;
+            }
             if (context != null) {
                 showToast(context, label + " 실패: " + detail);
             }
@@ -1431,8 +1556,13 @@ public final class MemberApiManager {
         @Override
         public void onFailure(Call<ApiModels.ApiResponse<JsonElement>> call, Throwable t) {
             Log.w(TAG, label + " error", t);
+            String msg = label + " 전송 중 오류가 발생했습니다.";
+            if (callback != null) {
+                callback.onError(msg);
+                return;
+            }
             if (context != null) {
-                showToast(context, label + " 전송 중 오류가 발생했습니다.");
+                showToast(context, msg);
             }
         }
     }

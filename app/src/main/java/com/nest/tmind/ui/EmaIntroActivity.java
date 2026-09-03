@@ -15,6 +15,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 
 import com.nest.tmind.R;
+import com.nest.tmind.api.ApiModels;
 import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.util.EmaQuestionBank;
 import com.nest.tmind.util.MissionManager;
@@ -61,50 +62,38 @@ public class EmaIntroActivity extends BaseSeniorActivity {
         btnStart.setOnClickListener(v -> loadServerQuestionsAndStart());
     }
 
-    /** Apidog: HRV/skip 완료된 sessionId 로 GET .../ema/questions 성공 후 설문 진입 */
+    /** HRV/skip 가 끝난 세션에서만 문항을 받는다. */
     private void loadServerQuestionsAndStart() {
         MissionManager mm = new MissionManager(this);
-        boolean event = mm.isAdditionalMeasureMode();
+        boolean event = mm.isAdditionalMeasureMode()
+                || getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, false);
+        if (event) {
+            mm.setAdditionalMeasureMode(true);
+        }
         MissionManager.Session missionSession = event
                 ? MissionManager.Session.EVENT
                 : MissionManager.mainSessionByHour();
         SessionManager sm = new SessionManager(this);
-
-        if (!mm.isHrvDone(missionSession) && !sm.isRemoteHrvDone()) {
+        boolean hrvDone;
+        if (event) {
+            hrvDone = mm.isHrvDone(MissionManager.Session.EVENT);
+        } else {
+            hrvDone = mm.isHrvDone(missionSession) || sm.isRemoteHrvDone();
+            ApiModels.TodayResponse today = MemberApiManager.lastToday();
+            if (today != null && Boolean.TRUE.equals(today.hrvDone)) {
+                hrvDone = true;
+            }
+        }
+        if (!hrvDone) {
             Toast.makeText(this, R.string.ema_need_hrv_first, Toast.LENGTH_LONG).show();
             return;
         }
 
         btnStart.setEnabled(false);
-        long sessionId = MemberApiManager.getCurrentSessionId(this, event);
-        if (sessionId > 0) {
-            requestQuestions(event);
-        } else {
-            ensureSessionThenQuestions(event, missionSession);
-        }
-    }
-
-    private void ensureSessionThenQuestions(boolean event, MissionManager.Session missionSession) {
         MemberApiManager.ensureSessionStarted(this, event, new MemberApiManager.ResultCallback<Long>() {
             @Override
             public void onSuccess(Long data) {
-                MissionManager mm = new MissionManager(EmaIntroActivity.this);
-                if (mm.isHrvDone(missionSession)) {
-                    MemberApiManager.skipHrv(EmaIntroActivity.this, event, "USER_SKIP",
-                            new MemberApiManager.ResultCallback<Void>() {
-                                @Override
-                                public void onSuccess(Void ignored) {
-                                    runOnUiThread(() -> requestQuestions(event));
-                                }
-
-                                @Override
-                                public void onError(String message) {
-                                    runOnUiThread(() -> requestQuestions(event));
-                                }
-                            });
-                } else {
-                    runOnUiThread(() -> requestQuestions(event));
-                }
+                runOnUiThread(() -> requestQuestions(event));
             }
 
             @Override

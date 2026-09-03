@@ -26,7 +26,10 @@ public class SessionManager {
     private static final String KEY_EVENT_SESSION_ID = "event_session_id";
     private static final String KEY_FCM_TOKEN = "fcm_token";
     private static final String KEY_EVENT_ACTIVE_REMOTE = "event_active_remote";
+    private static final String KEY_EVENT_AVAILABLE_REMOTE = "event_available_remote";
     private static final String KEY_HRV_STATUS = "hrv_status_remote";
+    private static final String KEY_TODAY_EMA_DONE = "today_ema_done_remote";
+    private static final String KEY_TODAY_DIARY_DONE = "today_diary_done_remote";
     private static final String KEY_EVENT_GUIDE = "event_guide_text";
     private static final String KEY_CRYPTO_KEY_ID = "crypto_key_id";
     private static final String KEY_CRYPTO_PUBLIC_KEY = "crypto_public_key";
@@ -41,7 +44,31 @@ public class SessionManager {
     }
 
     public boolean isPredictionSaved(long sessionId) {
-        return sessionId > 0 && sp.getLong("prediction_saved_session_id", 0L) == sessionId;
+        return sessionId > 0 && getPredictionSavedSessionId() == sessionId;
+    }
+
+    public long getPredictionSavedSessionId() {
+        return sp.getLong("prediction_saved_session_id", 0L);
+    }
+
+    public void clearPredictionSaved() {
+        sp.edit().remove("prediction_saved_session_id").apply();
+    }
+
+    /** 서버 날짜가 바뀌면 어제 세션·예측 플래그를 버린다. */
+    public void clearDayScopedServerState() {
+        sp.edit()
+                .remove(KEY_MAIN_SESSION_ID)
+                .remove(KEY_EVENT_SESSION_ID)
+                .remove(KEY_SERVER_TODAY_SESSION_ID)
+                .remove(KEY_HRV_STATUS)
+                .remove(KEY_TODAY_EMA_DONE)
+                .remove(KEY_TODAY_DIARY_DONE)
+                .remove("prediction_saved_session_id")
+                .remove("prediction_pending_session_id")
+                .remove("remote_ema_done_session_id")
+                .apply();
+        clearEmaQuestionsCache();
     }
 
     /** 예측은 HRV 가 서버에 저장된 뒤에만 받아준다(E00206). 그때까지 보류해 둔다. */
@@ -290,6 +317,14 @@ public class SessionManager {
         return sp.getBoolean(KEY_EVENT_ACTIVE_REMOTE, true);
     }
 
+    public void setRemoteEventAvailable(boolean available) {
+        sp.edit().putBoolean(KEY_EVENT_AVAILABLE_REMOTE, available).apply();
+    }
+
+    public boolean isRemoteEventAvailable() {
+        return sp.getBoolean(KEY_EVENT_AVAILABLE_REMOTE, false);
+    }
+
     /** VALID / SKIPPED / ""(미수행) */
     public void setRemoteHrvStatus(String status) {
         sp.edit().putString(KEY_HRV_STATUS, status != null ? status : "").apply();
@@ -309,6 +344,22 @@ public class SessionManager {
 
     public boolean isRemoteHrvDone() {
         return isRemoteHrvValid() || isRemoteHrvSkipped();
+    }
+
+    public void setTodayEmaDone(boolean done) {
+        sp.edit().putBoolean(KEY_TODAY_EMA_DONE, done).apply();
+    }
+
+    public boolean isTodayEmaDone() {
+        return sp.getBoolean(KEY_TODAY_EMA_DONE, false);
+    }
+
+    public void setTodayDiaryDone(boolean done) {
+        sp.edit().putBoolean(KEY_TODAY_DIARY_DONE, done).apply();
+    }
+
+    public boolean isTodayDiaryDone() {
+        return sp.getBoolean(KEY_TODAY_DIARY_DONE, false);
     }
 
     public void setCryptoPublicKey(String keyId, String publicKey) {

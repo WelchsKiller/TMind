@@ -68,18 +68,28 @@ public final class ApiModels {
     }
 
     public static final class TodayResponse {
+        /**
+         * 지금 해야 할 세션 유형. BASELINE / AM / PM / FOLLOWUP.
+         * 오늘 해당 유형을 이미 끝냈으면 null.
+         */
         public String currentType;
         /** 오후인데 오전 세션을 못 끝냈으면 "AM", 그 외 null. HRV 무효로 보류된 날은 제외된다. */
         public String missedType;
+        /** 오늘 유형으로 이미 시작한 세션. 아직 없으면 null → POST /session */
         public Long currentSessionId;
+        /** 건너뛰기를 해도 true. */
         public Boolean hrvDone;
         public Boolean emaDone;
         public Boolean diaryDone;
-        /** VALID / SKIPPED / null */
+        /** VALID / SKIPPED. 아직이면 null. VALID 가 아니면 같은 날 재측정 가능. */
         public String hrvStatus;
         public int totalCount;
         public int completedCount;
+        /** 관리자 추가 측정 on/off. 추가 측정 버튼 판정에 쓰지 않는다. */
         public boolean eventActive;
+        /** 이 참여자가 지금 추가 측정을 할 수 있는지. 추가 측정 버튼 활성/비활성. */
+        public Boolean eventAvailable;
+        /** 이벤트 on 일 때 화면 안내. 꺼져 있으면 null. */
         public String eventGuideText;
         /** 연구 기간 중 세션을 완료한 날 수. 하루에 여러 번 해도 1일로 센다. */
         public Integer participatedDays;

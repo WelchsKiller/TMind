@@ -398,23 +398,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         boolean additional = getIntent().getBooleanExtra(
                 AnalysisResultActivity.EXTRA_ADDITIONAL, false)
                 || mission.isAdditionalMeasureMode();
-        boolean fromHrv = getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_FROM_HRV, false);
-
-        if (fromHrv) {
-            Intent analysis = new Intent(this, AnalysisResultActivity.class);
-            analysis.putExtra(AnalysisResultActivity.EXTRA_FROM_HRV, true);
-            analysis.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, additional);
-            startActivity(analysis);
-            finish();
-            return;
-        }
-
-        if (additional) {
-            startActivity(new Intent(this, VoiceDiaryActivity.class));
-            finish();
-            return;
-        }
-        goDashboard();
+        AfterMissionSaved.afterEma(this, additional);
     }
 
     private void submitToServerThen(Runnable onDone) {
@@ -516,12 +500,5 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    private void goDashboard() {
-        Intent i = new Intent(this, DashboardActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(i);
-        finish();
     }
 }

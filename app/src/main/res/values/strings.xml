@@ -39,9 +39,12 @@
     <string name="mission_diary_sub">오늘 완료했어요</string>
     <string name="mission_diary_active">오늘 하루를 말씀해 주세요</string>
     <string name="mission_progress">오늘 미션 %1$d/3 완료</string>
-    <string name="mission_progress_session">%1$s 미션 %2$d/3 완료</string>
+    <string name="mission_progress_session">%1$s 미션 %2$d/%3$d 완료</string>
     <string name="session_morning">오전</string>
     <string name="session_afternoon">오후</string>
+    <string name="session_baseline">개시</string>
+    <string name="session_followup">종료</string>
+    <string name="session_today">오늘</string>
     <string name="session_event">추가</string>
     <string name="star_hint">오전·오후 미션을 각각 완료하면 별이 반 개씩 채워집니다.\n오전·오후를 모두 완료하면 별이 가득 차요.\n한쪽만 완료하고 추가 측정을 하면 반 별에 특별한 효과가 더해집니다.</string>
     <string name="new_participant">다른 참여자로 시작</string>
@@ -52,6 +55,8 @@
     <string name="additional_measure_locked">서버에 오늘 심박변이도가 저장된 뒤에 이용할 수 있어요.</string>
     <string name="additional_measure_need_hrv">심박변이도 측정을 먼저 완료해 주세요</string>
     <string name="additional_measure_max">오늘은 추가 측정을 모두 완료했어요 (최대 5회)</string>
+    <string name="additional_measure_admin_off">추가 측정은 현재 사용할 수 없습니다.</string>
+    <string name="additional_measure_unavailable">오늘은 추가 측정을 할 수 없어요.</string>
     <string name="mission_already_done">이미 완료한 미션입니다</string>
     <string name="mission_need_hrv_first">심박변이도를 먼저 완료하거나 건너뛰기를 진행해 주세요.</string>
     <string name="mission_need_ema_first">마음상태 설문을 먼저 완료해 주세요.</string>

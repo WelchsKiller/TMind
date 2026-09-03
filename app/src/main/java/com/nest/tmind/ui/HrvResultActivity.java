@@ -18,10 +18,7 @@ import com.nest.tmind.ecg.EcgConfig;
 import com.nest.tmind.ecg.EcgSurfaceView;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ecg.MeasureSessionStats;
-import com.nest.tmind.util.EmaQuestionBank;
-import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.MissionManager;
-import com.nest.tmind.util.RussellEmotionCalculator;
 import com.nest.tmind.util.SessionManager;
 
 import java.util.Arrays;
@@ -35,7 +32,6 @@ public class HrvResultActivity extends BaseSeniorActivity {
     private TextView tvBpm, tvHrvMs, tvDate;
     private Button btnNext;
     private boolean resultValid;
-    private boolean historySaved;
     private boolean navigating;
 
     @Override
@@ -118,7 +114,7 @@ public class HrvResultActivity extends BaseSeniorActivity {
                                         public void onSuccess(Void ignored) {
                                             runOnUiThread(() -> {
                                                 mission.setHrvDone();
-                                                goEmaAfterHrvSaved(additional);
+                                                AfterMissionSaved.afterHrv(HrvResultActivity.this, additional);
                                             });
                                         }
 
@@ -191,17 +187,6 @@ public class HrvResultActivity extends BaseSeniorActivity {
         return !sm.isPredictionSaved(id);
     }
 
-    private void goEmaAfterHrvSaved(boolean additional) {
-        Intent ema = new Intent(this, EmaIntroActivity.class);
-        ema.putExtra(EmaSurveyActivity.EXTRA_SESSION_TYPE,
-                additional ? EmaQuestionBank.SessionType.EVENT.name()
-                        : mapMainEmaSession().name());
-        ema.putExtra(AnalysisResultActivity.EXTRA_FROM_HRV, true);
-        ema.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, additional);
-        startActivity(ema);
-        finish();
-    }
-
     private void goRemeasure() {
         Intent i = new Intent(this, HrvGuideActivity.class);
         i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, restoreAdditionalMode());
@@ -248,13 +233,6 @@ public class HrvResultActivity extends BaseSeniorActivity {
             btnNext.setText(resultValid ? R.string.confirm_result : R.string.hrv_remeasure);
         }
 
-        if (resultValid && !historySaved) {
-            historySaved = true;
-            RussellEmotionCalculator.Point point = RussellEmotionCalculator.fromHrvStress(
-                    LastEcgResult.lastStressScore, hrv, hr);
-            HistoryStore.addAnalysis(this, "", hr, hrv, at, point.valence, point.arousal);
-        }
-
         if (LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
             final float[] spike = LastEcgResult.lastSpike;
             final int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
@@ -296,15 +274,6 @@ public class HrvResultActivity extends BaseSeniorActivity {
             out[i] = v * 0.5f;
         }
         return out;
-    }
-
-    private static EmaQuestionBank.SessionType mapMainEmaSession() {
-        switch (MissionManager.mainSessionByHour()) {
-            case AFTERNOON:
-                return EmaQuestionBank.SessionType.AFTERNOON;
-            default:
-                return EmaQuestionBank.SessionType.MORNING;
-        }
     }
 
     private void goDashboard() {

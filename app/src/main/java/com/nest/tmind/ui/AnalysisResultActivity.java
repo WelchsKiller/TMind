@@ -12,7 +12,7 @@ import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.RussellEmotionCalculator;
 import com.nest.tmind.view.RussellCircumplexView;
 
-/** 분석 결과 — HRV 예측을 Russell 사분면으로 표시 (언어 라벨 없음) */
+/** 세 가지 미션이 끝난 뒤 Russell 사분면을 표시하고 예측을 저장한다. */
 public class AnalysisResultActivity extends BaseSeniorActivity {
 
     public static final String EXTRA_FROM_HRV = "from_hrv";
