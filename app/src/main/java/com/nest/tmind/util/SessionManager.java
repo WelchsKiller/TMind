@@ -38,6 +38,8 @@ public class SessionManager {
     private static final String KEY_SERVER_DATE = "server_date";
     private static final String KEY_EMA_Q_CACHE_JSON = "ema_questions_cache_json";
     private static final String KEY_EMA_Q_CACHE_SID = "ema_questions_cache_session_id";
+    private static final String KEY_HRV_MEASURED_AT = "hrv_measured_at";
+    private static final String KEY_HRV_MEASURED_AT_SID = "hrv_measured_at_session_id";
     /** 피드백은 예측이 먼저 저장된 세션에서만 받아준다(E00702). */
     public void setPredictionSaved(long sessionId) {
         sp.edit().putLong("prediction_saved_session_id", sessionId).apply();
@@ -67,6 +69,8 @@ public class SessionManager {
                 .remove("prediction_saved_session_id")
                 .remove("prediction_pending_session_id")
                 .remove("remote_ema_done_session_id")
+                .remove(KEY_HRV_MEASURED_AT)
+                .remove(KEY_HRV_MEASURED_AT_SID)
                 .apply();
         clearEmaQuestionsCache();
     }
@@ -325,7 +329,7 @@ public class SessionManager {
         return sp.getBoolean(KEY_EVENT_AVAILABLE_REMOTE, false);
     }
 
-    /** VALID / SKIPPED / ""(미수행) */
+    /** VALID / ""(미수행). SKIPPED 는 서버에서 제거됨. */
     public void setRemoteHrvStatus(String status) {
         sp.edit().putString(KEY_HRV_STATUS, status != null ? status : "").apply();
     }
@@ -338,12 +342,26 @@ public class SessionManager {
         return "VALID".equalsIgnoreCase(getRemoteHrvStatus());
     }
 
-    public boolean isRemoteHrvSkipped() {
-        return "SKIPPED".equalsIgnoreCase(getRemoteHrvStatus());
+    public boolean isRemoteHrvDone() {
+        return isRemoteHrvValid();
     }
 
-    public boolean isRemoteHrvDone() {
-        return isRemoteHrvValid() || isRemoteHrvSkipped();
+    public void setLastHrvMeasuredAt(long sessionId, long measuredAt) {
+        if (sessionId <= 0) return;
+        sp.edit()
+                .putLong(KEY_HRV_MEASURED_AT_SID, sessionId)
+                .putLong(KEY_HRV_MEASURED_AT, measuredAt)
+                .apply();
+    }
+
+    public long getLastHrvMeasuredAt(long sessionId) {
+        if (sessionId <= 0) return 0L;
+        if (sp.getLong(KEY_HRV_MEASURED_AT_SID, 0L) != sessionId) return 0L;
+        return sp.getLong(KEY_HRV_MEASURED_AT, 0L);
+    }
+
+    public void clearRemoteEmaDone() {
+        sp.edit().remove("remote_ema_done_session_id").apply();
     }
 
     public void setTodayEmaDone(boolean done) {

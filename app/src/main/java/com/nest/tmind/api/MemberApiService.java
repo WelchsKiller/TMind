@@ -55,11 +55,6 @@ public interface MemberApiService {
             @Part MultipartBody.Part data,
             @Part MultipartBody.Part signal);
 
-    @POST("/api/member/session/{sessionId}/hrv/skip")
-    Call<ApiModels.ApiResponse<JsonElement>> skipHrv(
-            @Path("sessionId") long sessionId,
-            @Body ApiModels.SkipHrvRequest request);
-
     @POST("/api/member/session/{sessionId}/prediction")
     Call<ApiModels.ApiResponse<JsonElement>> savePrediction(
             @Path("sessionId") long sessionId,

@@ -219,12 +219,19 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void onHrvClick() {
         mission.setAdditionalMeasureMode(false);
-        // VALID 만 측정 완료. SKIPPED 등 VALID 가 아니면 재측정.
-        if (isHrvValid()) {
-            Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
-        } else {
-            openHrv();
+        if (isPredictionLocked()) {
+            Toast.makeText(this, R.string.hrv_cannot_remeasure_after_result, Toast.LENGTH_SHORT).show();
+            return;
         }
+        if (isHrvStageDone() && (isEmaDone() || isDiaryDone())) {
+            new AlertDialog.Builder(this)
+                    .setMessage(R.string.hrv_remeasure_resets_followup)
+                    .setPositiveButton(R.string.hrv_remeasure, (d, w) -> openHrv())
+                    .setNegativeButton(R.string.dialog_cancel, null)
+                    .show();
+            return;
+        }
+        openHrv();
     }
 
     private void onEmaClick() {
@@ -311,8 +318,8 @@ public class DashboardActivity extends BaseSeniorActivity {
         applyCardState(cardDiary, isDiaryDone(), R.drawable.bg_mission_card_diary);
 
         TextView hrvSub = cardHrv.findViewById(R.id.tvMissionSub);
-        if (isHrvStageDone() && !isHrvValid()) {
-            hrvSub.setText("다시 측정해 주세요");
+        if (isHrvStageDone() && !isPredictionLocked()) {
+            hrvSub.setText(R.string.hrv_can_remeasure_until_result);
         } else {
             hrvSub.setText(R.string.mission_hrv_sub);
         }
@@ -356,9 +363,15 @@ public class DashboardActivity extends BaseSeniorActivity {
         return today != null && Boolean.TRUE.equals(today.hrvDone);
     }
 
-    private boolean isHrvValid() {
-        return today != null && today.hrvStatus != null
-                && "VALID".equalsIgnoreCase(today.hrvStatus.trim());
+    /** 결과(예측) 화면이 나온 뒤에는 이 세션의 심박을 다시 잴 수 없다. */
+    private boolean isPredictionLocked() {
+        long sid = 0L;
+        if (today != null && today.currentSessionId != null) {
+            sid = today.currentSessionId;
+        }
+        if (sid <= 0) sid = session.getCurrentSessionId(false);
+        if (sid > 0) return session.isPredictionSaved(sid);
+        return isTodayAllDone();
     }
 
     private boolean isEmaDone() {

@@ -184,6 +184,15 @@ public class MissionManager {
         sp.edit().putBoolean(k(getActiveSession(), "diary"), false).apply();
     }
 
+    /** HRV 재측정 시 설문·일기는 처음부터 다시 한다. */
+    public void clearFollowUpMissions(Session s) {
+        if (s == null) s = getActiveSession();
+        sp.edit()
+                .putBoolean(k(s, "ema"), false)
+                .putBoolean(k(s, "diary"), false)
+                .commit();
+    }
+
     public void clearEventMissions() {
         Session s = Session.EVENT;
         sp.edit()

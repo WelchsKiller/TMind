@@ -9,10 +9,8 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AlertDialog;
 
 import com.nest.tmind.R;
-import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.ecg.EcgConfig;
 import com.nest.tmind.util.BlePermissionHelper;
 import com.nest.tmind.util.MissionManager;
@@ -20,8 +18,6 @@ import com.nest.tmind.util.SessionManager;
 
 /** HRV 측정 안내 (패치 부착 설명 + BLE 권한/연결 준비) */
 public class HrvGuideActivity extends BaseSeniorActivity {
-
-    private static final String SKIP_REASON = "USER_SKIP";
 
     private ActivityResultLauncher<String[]> permLauncher;
     private MissionManager mission;
@@ -31,7 +27,12 @@ public class HrvGuideActivity extends BaseSeniorActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_hrv_guide);
         mission = new MissionManager(this);
-        restoreAdditionalMode();
+        boolean additional = restoreAdditionalMode();
+        if (isPredictionLocked(additional)) {
+            Toast.makeText(this, R.string.hrv_cannot_remeasure_after_result, Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
 
         permLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(),
@@ -46,49 +47,14 @@ public class HrvGuideActivity extends BaseSeniorActivity {
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvGuide);
 
-        Button btnSkip = findViewById(R.id.btnSkip);
         Button btnStart = findViewById(R.id.btnStart);
-        btnSkip.setOnClickListener(v -> confirmSkipHrv());
         btnStart.setOnClickListener(v -> requestBleAndStart());
     }
 
-    private void confirmSkipHrv() {
-        new AlertDialog.Builder(this)
-                .setMessage(R.string.hrv_skip_confirm)
-                .setPositiveButton(R.string.hrv_skip, (d, w) -> skipHrvAndContinue())
-                .setNegativeButton(R.string.dialog_cancel, null)
-                .show();
-    }
-
-    private void skipHrvAndContinue() {
-        boolean event = restoreAdditionalMode();
-        MemberApiManager.ensureSessionStarted(this, event, new MemberApiManager.ResultCallback<Long>() {
-            @Override
-            public void onSuccess(Long data) {
-                runOnUiThread(() ->
-                        MemberApiManager.skipHrv(HrvGuideActivity.this, event, SKIP_REASON,
-                                new MemberApiManager.ResultCallback<Void>() {
-                                    @Override
-                                    public void onSuccess(Void ignored) {
-                                        SessionManager sm = new SessionManager(HrvGuideActivity.this);
-                                        sm.setRemoteHrvStatus("SKIPPED");
-                                        mission.setHrvDone();
-                                        AfterMissionSaved.afterHrv(HrvGuideActivity.this, event);
-                                    }
-
-                                    @Override
-                                    public void onError(String message) {
-                                        Toast.makeText(HrvGuideActivity.this, message, Toast.LENGTH_LONG).show();
-                                    }
-                                }));
-            }
-
-            @Override
-            public void onError(String message) {
-                runOnUiThread(() ->
-                        Toast.makeText(HrvGuideActivity.this, message, Toast.LENGTH_LONG).show());
-            }
-        });
+    private boolean isPredictionLocked(boolean additional) {
+        SessionManager sm = new SessionManager(this);
+        long sid = sm.getCurrentSessionId(additional);
+        return sid > 0 && sm.isPredictionSaved(sid);
     }
 
     private boolean restoreAdditionalMode() {

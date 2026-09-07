@@ -54,19 +54,11 @@
     </ScrollView>
 
     <Button
-        android:id="@+id/btnSkip"
-        style="@style/SeniorButton"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:layout_marginBottom="12dp"
-        android:background="@drawable/bg_btn_outline"
-        android:text="@string/hrv_skip"
-        android:textColor="@color/teal_dark" />
-    <Button
         android:id="@+id/btnStart"
         style="@style/SeniorButton"
         android:layout_width="match_parent"
         android:layout_height="60dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_btn_primary"
         android:text="@string/hrv_start"
         android:textColor="@color/white" />

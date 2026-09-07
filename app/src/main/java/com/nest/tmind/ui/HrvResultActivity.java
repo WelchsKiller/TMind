@@ -94,11 +94,19 @@ public class HrvResultActivity extends BaseSeniorActivity {
 
         navigating = true;
         btnNext.setEnabled(false);
+        MissionManager mission = new MissionManager(this);
+        boolean additional = restoreAdditionalMode();
+        SessionManager sm = new SessionManager(this);
+        long sid = sm.getCurrentSessionId(additional);
+        if (sid > 0 && sm.isPredictionSaved(sid)) {
+            navigating = false;
+            btnNext.setEnabled(true);
+            Toast.makeText(this, R.string.hrv_cannot_remeasure_after_result, Toast.LENGTH_LONG).show();
+            return;
+        }
         Toast.makeText(this, "심박변이도를 서버에 저장하는 중입니다.", Toast.LENGTH_SHORT).show();
 
         try {
-            MissionManager mission = new MissionManager(this);
-            boolean additional = restoreAdditionalMode();
             MemberApiManager.ResultCallback<Long> afterSession =
                     new MemberApiManager.ResultCallback<Long>() {
                         @Override

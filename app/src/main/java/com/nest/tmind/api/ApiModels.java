@@ -77,11 +77,11 @@ public final class ApiModels {
         public String missedType;
         /** 오늘 유형으로 이미 시작한 세션. 아직 없으면 null → POST /session */
         public Long currentSessionId;
-        /** 건너뛰기를 해도 true. */
+        /** 실제 측정이 끝나면 true. */
         public Boolean hrvDone;
         public Boolean emaDone;
         public Boolean diaryDone;
-        /** VALID / SKIPPED. 아직이면 null. VALID 가 아니면 같은 날 재측정 가능. */
+        /** VALID. 아직이면 null. 예측 저장 전에는 재측정 가능. */
         public String hrvStatus;
         public int totalCount;
         public int completedCount;
@@ -130,14 +130,6 @@ public final class ApiModels {
 
         public FcmTokenRequest(String fcmToken) {
             this.fcmToken = fcmToken;
-        }
-    }
-
-    public static final class SkipHrvRequest {
-        public final String skipReason;
-
-        public SkipHrvRequest(String skipReason) {
-            this.skipReason = skipReason;
         }
     }
 

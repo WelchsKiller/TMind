@@ -14,6 +14,7 @@ import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.ui.LoginActivity;
 import com.nest.tmind.util.EcgUploadCrypto;
 import com.nest.tmind.util.InterventionClassifier;
+import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.util.SessionManager;
 
 import java.io.File;
@@ -284,7 +285,7 @@ public final class MemberApiManager {
         if (data.hrvStatus != null && !data.hrvStatus.trim().isEmpty()) {
             session.setRemoteHrvStatus(data.hrvStatus.trim());
         } else if (Boolean.TRUE.equals(data.hrvDone)) {
-            session.setRemoteHrvStatus("SKIPPED");
+            session.setRemoteHrvStatus("VALID");
         } else {
             session.setRemoteHrvStatus("");
         }
@@ -486,6 +487,12 @@ public final class MemberApiManager {
                         if (data.hrvStatus != null) {
                             session.setRemoteHrvStatus(data.hrvStatus);
                         }
+                        if (data.emaDone != null) {
+                            session.setTodayEmaDone(data.emaDone);
+                        }
+                        if (data.diaryDone != null) {
+                            session.setTodayDiaryDone(data.diaryDone);
+                        }
                         Log.i(TAG, "startSession ok isEvent=" + event + " sessionId=" + data.sessionId);
                         callback.onSuccess(data.sessionId);
                     }
@@ -592,7 +599,7 @@ public final class MemberApiManager {
                             return;
                         }
                         Log.d(TAG, "uploadHrv ok: sessionId=" + sessionId);
-                        new SessionManager(context).setRemoteHrvStatus("VALID");
+                        applyHrvUploadSuccess(context, sessionId, measuredAt);
                         if (callback != null) callback.onSuccess(null);
                         else refreshTodayAfterSave(context);
                     }
@@ -668,45 +675,34 @@ public final class MemberApiManager {
         showToast(context, message);
     }
 
-    public static void skipHrv(Context context, boolean event, String reason) {
-        skipHrv(context, event, reason, null);
-    }
-
-    public static void skipHrv(Context context, boolean event, String reason,
-                               ResultCallback<Void> callback) {
-        long sessionId = new SessionManager(context).getCurrentSessionId(event);
-        if (sessionId <= 0) {
-            if (callback != null) callback.onError("세션이 없습니다.");
-            return;
+    /**
+     * measuredAt 이 기존과 다르면 재측정이다. 설문·일기 Done 을 로컬에서도 되돌린다.
+     * 같으면 같은 측정의 재전송이라 진행 상태는 유지한다.
+     */
+    private static void applyHrvUploadSuccess(Context context, long sessionId, long measuredAt) {
+        SessionManager session = new SessionManager(context);
+        long prev = session.getLastHrvMeasuredAt(sessionId);
+        boolean remeasure = prev > 0 && prev != measuredAt;
+        session.setRemoteHrvStatus("VALID");
+        session.setLastHrvMeasuredAt(sessionId, measuredAt);
+        if (!remeasure) return;
+        Log.i(TAG, "HRV remeasure: sessionId=" + sessionId
+                + " prevMeasuredAt=" + prev + " newMeasuredAt=" + measuredAt);
+        session.setTodayEmaDone(false);
+        session.setTodayDiaryDone(false);
+        session.clearRemoteEmaDone();
+        session.clearEmaQuestionsCache();
+        session.clearEmaProgress();
+        MissionManager mm = new MissionManager(context);
+        MissionManager.Session s = mm.isAdditionalMeasureMode()
+                ? MissionManager.Session.EVENT
+                : MissionManager.mainSessionByHour();
+        mm.clearFollowUpMissions(s);
+        ApiModels.TodayResponse cached = lastToday;
+        if (cached != null) {
+            cached.emaDone = false;
+            cached.diaryDone = false;
         }
-        MemberApiClient.service(context).skipHrv(sessionId, new ApiModels.SkipHrvRequest(reason))
-                .enqueue(new Callback<ApiModels.ApiResponse<JsonElement>>() {
-                    @Override
-                    public void onResponse(Call<ApiModels.ApiResponse<JsonElement>> call,
-                                           Response<ApiModels.ApiResponse<JsonElement>> response) {
-                        if (handleAuthFailure(context, response.code(), response)) {
-                            return;
-                        }
-                        ApiModels.ApiResponse<JsonElement> body = response.body();
-                        if (!response.isSuccessful() || body == null || !body.isSuccess()) {
-                            if (callback != null) {
-                                callback.onError(errorMessage(body, response.code(),
-                                        "심박변이도 건너뛰기에 실패했습니다."));
-                            }
-                            return;
-                        }
-                        new SessionManager(context).setRemoteHrvStatus("SKIPPED");
-                        if (callback != null) callback.onSuccess(null);
-                        else refreshTodayAfterSave(context);
-                    }
-
-                    @Override
-                    public void onFailure(Call<ApiModels.ApiResponse<JsonElement>> call, Throwable t) {
-                        if (callback != null) {
-                            callback.onError("심박변이도 건너뛰기에 실패했습니다.");
-                        }
-                    }
-                });
     }
 
     public static void savePrediction(Context context, boolean event,
@@ -747,7 +743,7 @@ public final class MemberApiManager {
             if (callback != null) callback.onSuccess(null);
             return;
         }
-        // 서버 순서: HRV(또는 skip) → EMA → 일기 → 예측. 일기 전이면 E00212 이다.
+        // 서버 순서: HRV → EMA → 일기 → 예측. 일기 전이면 E00212 이다.
         if (!session.isRemoteHrvDone()) {
             session.setPredictionPending(sessionId);
             Log.i(TAG, "savePrediction deferred until HRV saved. sessionId=" + sessionId);
@@ -960,7 +956,7 @@ public final class MemberApiManager {
                                           ResultCallback<List<ApiModels.QuestionResponse>> callback) {
         long sessionId = new SessionManager(context).getCurrentSessionId(event);
         if (sessionId <= 0) {
-            callback.onError("세션이 없습니다. 심박변이도 측정 또는 건너뛰기를 먼저 완료해 주세요.");
+            callback.onError("세션이 없습니다. 심박변이도 측정을 먼저 완료해 주세요.");
             return;
         }
         Log.d(TAG, "fetchEmaQuestions sessionId=" + sessionId + " event=" + event);
@@ -1376,7 +1372,7 @@ public final class MemberApiManager {
     private static String apiErrorMessage(ApiModels.ApiResponse<?> body, int httpCode, String fallback) {
         if (body != null && body.code != null) {
             if ("E00201".equals(body.code)) {
-                return "세션이 없습니다. HRV 측정 또는 건너뛰기 후 다시 시도해 주세요.";
+                return "세션이 없습니다. 심박변이도 측정 후 다시 시도해 주세요.";
             }
             if ("E00301".equals(body.code)) {
                 return "설문 문항이 아직 준비되지 않았습니다.";
