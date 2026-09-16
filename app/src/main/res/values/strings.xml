@@ -30,6 +30,8 @@
     <!-- Dashboard -->
     <string name="dashboard_title">오늘의 기록</string>
     <string name="dashboard_greeting">오늘도 함께해요</string>
+    <string name="logout">로그아웃</string>
+    <string name="logout_confirm">로그아웃할까요?\n다시 참여하려면 번호를 입력해 주세요.</string>
     <string name="dashboard_greeting_named">%1$s 님, 오늘도 함께해요</string>
     <string name="mission_hrv">심박변이도 측정</string>
     <string name="mission_hrv_sub">5분 안정 측정 후 결과 확인</string>

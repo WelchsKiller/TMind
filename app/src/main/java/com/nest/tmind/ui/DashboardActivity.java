@@ -69,6 +69,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         tvGreeting.setText(R.string.dashboard_greeting);
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvGreeting, R.id.tvProgress);
 
+        findViewById(R.id.btnLogout).setOnClickListener(v -> confirmLogout());
         cardHrv.setOnClickListener(v -> onHrvClick());
         cardEma.setOnClickListener(v -> onEmaClick());
         cardDiary.setOnClickListener(v -> onDiaryClick());
@@ -101,7 +102,15 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void confirmNewParticipant() {
         new AlertDialog.Builder(this)
                 .setMessage(R.string.new_participant_confirm)
-                .setPositiveButton(R.string.dialog_yes, (d, w) -> logoutToLogin())
+                .setPositiveButton(R.string.dialog_yes, (d, w) -> logoutToLogin(true))
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .show();
+    }
+
+    private void confirmLogout() {
+        new AlertDialog.Builder(this)
+                .setMessage(R.string.logout_confirm)
+                .setPositiveButton(R.string.logout, (d, w) -> logoutToLogin(false))
                 .setNegativeButton(R.string.dialog_cancel, null)
                 .show();
     }
@@ -118,10 +127,10 @@ public class DashboardActivity extends BaseSeniorActivity {
         lastTitleTapMs = now;
         if (++titleTapCount < SECRET_TAP_COUNT) return;
         titleTapCount = 0;
-        logoutToLogin();
+        logoutToLogin(true);
     }
 
-    private void logoutToLogin() {
+    private void logoutToLogin(boolean forceRegister) {
         MemberApiManager.logout(this, new MemberApiManager.ResultCallback<Void>() {
             @Override
             public void onSuccess(Void data) {
@@ -133,7 +142,9 @@ public class DashboardActivity extends BaseSeniorActivity {
         });
         session.logoutForNewParticipant();
         Intent i = new Intent(this, LoginActivity.class);
-        i.putExtra(LoginActivity.EXTRA_FORCE_REGISTER, true);
+        if (forceRegister) {
+            i.putExtra(LoginActivity.EXTRA_FORCE_REGISTER, true);
+        }
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(i);
         finish();
