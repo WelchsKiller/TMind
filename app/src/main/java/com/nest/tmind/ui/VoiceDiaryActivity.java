@@ -188,6 +188,14 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
         tvStatus.setText("음성 일기를 서버에 저장하는 중입니다.");
         SessionManager sm = new SessionManager(this);
         long sessionId = MemberApiManager.getCurrentSessionId(this, additional);
+        if (sessionId > 0 && sm.isPredictionSaved(sessionId)) {
+            uploading = false;
+            btnRecord.setEnabled(true);
+            Toast.makeText(this, R.string.mission_locked_after_result, Toast.LENGTH_LONG).show();
+            return;
+        }
+        boolean hrvInvalid = !additional && (sm.isRemoteHrvInvalid()
+                || MemberApiManager.isTodayHrvInvalid(MemberApiManager.lastToday()));
         boolean priorDone = additional
                 ? (mission.isHrvDone(MissionManager.Session.EVENT)
                 && mission.isEmaDone(MissionManager.Session.EVENT))
@@ -195,12 +203,15 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
                 && (sm.isTodayEmaDone()
                 || sm.isRemoteEmaDone(sessionId)
                 || mission.isEmaDone()));
-        if (sessionId <= 0 || !priorDone) {
+        if (sessionId <= 0 || hrvInvalid || !priorDone) {
             uploading = false;
             btnRecord.setEnabled(true);
-            Toast.makeText(this, priorDone
+            int msg = sessionId <= 0
+                    ? 0
+                    : (hrvInvalid ? R.string.mission_need_valid_hrv : R.string.mission_need_ema_first);
+            Toast.makeText(this, sessionId <= 0
                             ? "세션이 없어 음성 일기를 저장하지 못했습니다."
-                            : getString(R.string.mission_need_ema_first),
+                            : getString(msg),
                     Toast.LENGTH_LONG).show();
             return;
         }

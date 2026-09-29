@@ -151,6 +151,14 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void confirmExitIfMissionsIncomplete() {
+        if (hasPendingTodaySession()) {
+            new AlertDialog.Builder(this)
+                    .setMessage(R.string.confirm_exit_missions)
+                    .setPositiveButton(R.string.dialog_end, (d, w) -> finishAffinity())
+                    .setNegativeButton(R.string.dialog_cancel, null)
+                    .show();
+            return;
+        }
         if (isTodayAllDone() || session.isStudyEnded()) {
             finishAffinity();
             return;
@@ -234,7 +242,7 @@ public class DashboardActivity extends BaseSeniorActivity {
             Toast.makeText(this, R.string.hrv_cannot_remeasure_after_result, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (isHrvStageDone() && (isEmaDone() || isDiaryDone())) {
+        if ((isHrvValid() || isHrvInvalid()) && (isEmaDone() || isDiaryDone())) {
             new AlertDialog.Builder(this)
                     .setMessage(R.string.hrv_remeasure_resets_followup)
                     .setPositiveButton(R.string.hrv_remeasure, (d, w) -> openHrv())
@@ -247,12 +255,19 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void onEmaClick() {
         mission.setAdditionalMeasureMode(false);
+        if (isPredictionLocked()) {
+            Toast.makeText(this, R.string.mission_locked_after_result, Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (isEmaDone()) {
             Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (!isHrvStageDone()) {
-            Toast.makeText(this, R.string.mission_need_hrv_first, Toast.LENGTH_LONG).show();
+        if (!isHrvValid()) {
+            Toast.makeText(this, isHrvInvalid()
+                            ? R.string.mission_need_valid_hrv
+                            : R.string.mission_need_hrv_first,
+                    Toast.LENGTH_LONG).show();
             return;
         }
         openEma();
@@ -260,12 +275,19 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private void onDiaryClick() {
         mission.setAdditionalMeasureMode(false);
+        if (isPredictionLocked()) {
+            Toast.makeText(this, R.string.mission_locked_after_result, Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (isDiaryDone()) {
             Toast.makeText(this, R.string.mission_already_done, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (!isHrvStageDone()) {
-            Toast.makeText(this, R.string.mission_need_hrv_first, Toast.LENGTH_LONG).show();
+        if (!isHrvValid()) {
+            Toast.makeText(this, isHrvInvalid()
+                            ? R.string.mission_need_valid_hrv
+                            : R.string.mission_need_hrv_first,
+                    Toast.LENGTH_LONG).show();
             return;
         }
         if (!isEmaDone()) {
@@ -293,14 +315,9 @@ public class DashboardActivity extends BaseSeniorActivity {
         if (mission.isAdditionalMeasureMode()) {
             return EmaQuestionBank.SessionType.EVENT;
         }
-        if (today != null && today.currentType != null) {
-            switch (today.currentType.trim().toUpperCase()) {
-                case "PM":
-                case "AFTERNOON":
-                    return EmaQuestionBank.SessionType.AFTERNOON;
-                default:
-                    return EmaQuestionBank.SessionType.MORNING;
-            }
+        if (today != null) {
+            EmaQuestionBank.SessionType fromServer = EmaQuestionBank.fromServerType(today.currentType);
+            if (fromServer != null) return fromServer;
         }
         switch (MissionManager.mainSessionByHour()) {
             case AFTERNOON:
@@ -324,12 +341,14 @@ public class DashboardActivity extends BaseSeniorActivity {
         progressBar.setMax(total);
         progressBar.setProgress(Math.min(done, total));
 
-        applyCardState(cardHrv, isHrvStageDone(), R.drawable.bg_mission_card_active);
+        applyCardState(cardHrv, isHrvValid(), R.drawable.bg_mission_card_active);
         applyCardState(cardEma, isEmaDone(), R.drawable.bg_mission_card_ema);
         applyCardState(cardDiary, isDiaryDone(), R.drawable.bg_mission_card_diary);
 
         TextView hrvSub = cardHrv.findViewById(R.id.tvMissionSub);
-        if (isHrvStageDone() && !isPredictionLocked()) {
+        if (isHrvInvalid() && !isPredictionLocked()) {
+            hrvSub.setText(R.string.hrv_status_invalid_remeasure);
+        } else if (isHrvValid() && !isPredictionLocked()) {
             hrvSub.setText(R.string.hrv_can_remeasure_until_result);
         } else {
             hrvSub.setText(R.string.mission_hrv_sub);
@@ -370,8 +389,12 @@ public class DashboardActivity extends BaseSeniorActivity {
         return getString(R.string.additional_measure_unavailable);
     }
 
-    private boolean isHrvStageDone() {
-        return today != null && Boolean.TRUE.equals(today.hrvDone);
+    private boolean isHrvValid() {
+        return MemberApiManager.isTodayHrvValid(today);
+    }
+
+    private boolean isHrvInvalid() {
+        return MemberApiManager.isTodayHrvInvalid(today);
     }
 
     /** 결과(예측) 화면이 나온 뒤에는 이 세션의 심박을 다시 잴 수 없다. */
@@ -398,13 +421,19 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private boolean isTodayAllDone() {
-        return isHrvStageDone() && isEmaDone() && isDiaryDone();
+        return isHrvValid() && isEmaDone() && isDiaryDone();
+    }
+
+    /** /today 가 FOLLOWUP 등 아직 할 세션을 내려주면, 연구 기간이 지나도 이어간다. */
+    private boolean hasPendingTodaySession() {
+        if (today == null || today.currentType == null) return false;
+        return !today.currentType.trim().isEmpty() && !isTodayAllDone();
     }
 
     private int todayCompletedCount() {
         if (today == null) return 0;
         int n = 0;
-        if (Boolean.TRUE.equals(today.hrvDone)) n++;
+        if (MemberApiManager.isTodayHrvValid(today)) n++;
         if (Boolean.TRUE.equals(today.emaDone)) n++;
         if (Boolean.TRUE.equals(today.diaryDone)) n++;
         return n;
@@ -490,7 +519,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         today = data;
         MissionManager.Session main = mapCurrentType(data.currentType);
         mission.syncFromServer(main,
-                Boolean.TRUE.equals(data.hrvDone),
+                MemberApiManager.isTodayHrvValid(data),
                 Boolean.TRUE.equals(data.emaDone),
                 Boolean.TRUE.equals(data.diaryDone));
         if (data.missedType != null && !data.missedType.trim().isEmpty()) {
@@ -521,7 +550,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         float d = getResources().getDisplayMetrics().density;
         int size = (int) (36 * d);
         int pad = (int) (3 * d);
-        int[] states = starStatesFromParticipation();
+        int[] states = starStates();
         for (int i = 0; i < states.length; i++) {
             ImageView iv = new ImageView(this);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
@@ -546,7 +575,44 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
     }
 
-    /** 참여 현황 days 의 amDone / pmDone / eventDone 으로 별 7칸을 채운다. */
+    /** /today stars 가 있으면 그대로 쓰고, 없으면 참여 현황 days 로 맞춘다. */
+    private int[] starStates() {
+        if (today != null && today.stars != null && !today.stars.isEmpty()) {
+            return starStatesFromToday();
+        }
+        return starStatesFromParticipation();
+    }
+
+    /**
+     * 서버 stars: 1=안함, 2=반, 3=반+추가, 4=가득, 5=가득+추가.
+     * 반복측정 1일차부터 날짜순 7칸. 빈 날도 건너뛰지 않는다.
+     */
+    private int[] starStatesFromToday() {
+        int[] row = new int[7];
+        int n = Math.min(7, today.stars.size());
+        for (int i = 0; i < n; i++) {
+            Integer v = today.stars.get(i);
+            row[i] = starStateFromServer(v != null ? v : 1);
+        }
+        return row;
+    }
+
+    private static int starStateFromServer(int serverStar) {
+        switch (serverStar) {
+            case 2:
+                return MissionManager.STAR_HALF;
+            case 3:
+                return MissionManager.STAR_HALF_BONUS;
+            case 4:
+                return MissionManager.STAR_FULL;
+            case 5:
+                return MissionManager.STAR_BONUS;
+            default:
+                return MissionManager.STAR_EMPTY;
+        }
+    }
+
+    /** 예전 참여 현황 days 폴백. */
     private int[] starStatesFromParticipation() {
         int[] row = new int[7];
         if (participation == null || participation.period == null

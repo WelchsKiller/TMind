@@ -228,8 +228,21 @@ public final class MemberApiManager {
                 && "VALID".equalsIgnoreCase(data.hrvStatus.trim());
     }
 
+    public static boolean isTodayHrvInvalid(ApiModels.TodayResponse data) {
+        return data != null && data.hrvStatus != null
+                && "INVALID".equalsIgnoreCase(data.hrvStatus.trim());
+    }
+
     public static boolean isTodayHrvStageDone(ApiModels.TodayResponse data) {
         return data != null && Boolean.TRUE.equals(data.hrvDone);
+    }
+
+    /** SKIPPED 는 서버에서 폐지됨. 예전 값이 남아 있어도 미수행으로 본다. */
+    private static String normalizeHrvStatus(String raw) {
+        if (raw == null) return "";
+        String status = raw.trim();
+        if (status.isEmpty() || "SKIPPED".equalsIgnoreCase(status)) return "";
+        return status;
     }
 
     /** 추가 측정 버튼은 eventAvailable 만 본다. eventActive 는 관리자 on/off. */
@@ -255,6 +268,7 @@ public final class MemberApiManager {
                 + " completedCount=" + data.completedCount
                 + " totalCount=" + data.totalCount
                 + " participatedDays=" + data.participatedDays
+                + " stars=" + data.stars
                 + " serverDate=" + data.serverDate
                 + " eventGuideText=" + data.eventGuideText);
         Log.i("TMindToday", "GET /today json=" + GSON.toJson(data));
@@ -282,13 +296,7 @@ public final class MemberApiManager {
             session.clearCurrentSession(false);
         }
 
-        if (data.hrvStatus != null && !data.hrvStatus.trim().isEmpty()) {
-            session.setRemoteHrvStatus(data.hrvStatus.trim());
-        } else if (Boolean.TRUE.equals(data.hrvDone)) {
-            session.setRemoteHrvStatus("VALID");
-        } else {
-            session.setRemoteHrvStatus("");
-        }
+        session.setRemoteHrvStatus(normalizeHrvStatus(data.hrvStatus));
         session.setTodayEmaDone(Boolean.TRUE.equals(data.emaDone));
         session.setTodayDiaryDone(Boolean.TRUE.equals(data.diaryDone));
 
@@ -485,7 +493,7 @@ public final class MemberApiManager {
                         }
                         session.setCurrentSessionId(event, data.sessionId);
                         if (data.hrvStatus != null) {
-                            session.setRemoteHrvStatus(data.hrvStatus);
+                            session.setRemoteHrvStatus(normalizeHrvStatus(data.hrvStatus));
                         }
                         if (data.emaDone != null) {
                             session.setTodayEmaDone(data.emaDone);
@@ -529,6 +537,15 @@ public final class MemberApiManager {
             reportHrvFailure(context, callback,
                     "추가 측정용 세션이 없습니다. 홈에서 추가 측정을 다시 시작해 주세요.");
             return;
+        }
+        if (session.isPredictionSaved(sessionId)) {
+            long prev = session.getLastHrvMeasuredAt(sessionId);
+            long at = measuredAtMs > 0 ? measuredAtMs : 0L;
+            if (prev <= 0L || at != prev) {
+                reportHrvFailure(context, callback,
+                        "결과를 확인한 뒤에는 심박변이도를 다시 측정할 수 없어요.");
+                return;
+            }
         }
         ensureCryptoPublicKey(context, new Continuation() {
             @Override
@@ -599,7 +616,7 @@ public final class MemberApiManager {
                             return;
                         }
                         Log.d(TAG, "uploadHrv ok: sessionId=" + sessionId);
-                        applyHrvUploadSuccess(context, sessionId, measuredAt);
+                        applyHrvUploadSuccess(context, sessionId, measuredAt, measurementValid);
                         if (callback != null) callback.onSuccess(null);
                         else refreshTodayAfterSave(context);
                     }
@@ -679,12 +696,18 @@ public final class MemberApiManager {
      * measuredAt 이 기존과 다르면 재측정이다. 설문·일기 Done 을 로컬에서도 되돌린다.
      * 같으면 같은 측정의 재전송이라 진행 상태는 유지한다.
      */
-    private static void applyHrvUploadSuccess(Context context, long sessionId, long measuredAt) {
+    private static void applyHrvUploadSuccess(Context context, long sessionId, long measuredAt,
+                                              boolean measurementValid) {
         SessionManager session = new SessionManager(context);
         long prev = session.getLastHrvMeasuredAt(sessionId);
         boolean remeasure = prev > 0 && prev != measuredAt;
-        session.setRemoteHrvStatus("VALID");
+        session.setRemoteHrvStatus(measurementValid ? "VALID" : "INVALID");
         session.setLastHrvMeasuredAt(sessionId, measuredAt);
+        ApiModels.TodayResponse cached = lastToday;
+        if (cached != null) {
+            cached.hrvDone = true;
+            cached.hrvStatus = measurementValid ? "VALID" : "INVALID";
+        }
         if (!remeasure) return;
         Log.i(TAG, "HRV remeasure: sessionId=" + sessionId
                 + " prevMeasuredAt=" + prev + " newMeasuredAt=" + measuredAt);
@@ -698,7 +721,6 @@ public final class MemberApiManager {
                 ? MissionManager.Session.EVENT
                 : MissionManager.mainSessionByHour();
         mm.clearFollowUpMissions(s);
-        ApiModels.TodayResponse cached = lastToday;
         if (cached != null) {
             cached.emaDone = false;
             cached.diaryDone = false;
@@ -831,7 +853,7 @@ public final class MemberApiManager {
 
     /**
      * MATCH/UNKNOWN: matchResult + occurredAt 만 전송.
-     * MISMATCH: 사분면 수정으로 고른 좌표와 reasonCode 를 함께 전송.
+     * MISMATCH: 사분면으로 고른 좌표만 전송. reasonCode 필드는 서버에서 제거됨.
      * 일치·모름에 좌표를 넣으면 서버가 E00802 로 거절한다.
      */
     public static void submitFeedback(Context context, boolean event, String choice,
@@ -840,7 +862,6 @@ public final class MemberApiManager {
         long sessionId = session.getCurrentSessionId(event);
         if (sessionId <= 0) return;
         String match = matchResult(choice);
-        String reason = null;
         Float cv = null;
         Float ca = null;
         if ("MISMATCH".equals(match)) {
@@ -848,21 +869,19 @@ public final class MemberApiManager {
                 showToast(context, "다른 감정 위치를 선택한 뒤 다시 제출해 주세요.");
                 return;
             }
-            reason = "MANUAL_EDIT";
             cv = safeFloat(correctedValence, -1.2f, 1.2f);
             ca = safeFloat(correctedArousal, -1.2f, 1.2f);
         }
         Log.d(TAG, "submitFeedback sessionId=" + sessionId + " match=" + match
                 + " valence=" + cv + " arousal=" + ca);
-        final String reasonCode = reason;
         final Float sendV = cv;
         final Float sendA = ca;
         if (session.isPredictionSaved(sessionId)) {
-            sendFeedback(context, sessionId, match, reasonCode, sendV, sendA, true);
+            sendFeedback(context, sessionId, match, sendV, sendA, true);
             return;
         }
         savePredictionThen(context, event, session,
-                () -> sendFeedback(context, sessionId, match, reasonCode, sendV, sendA, false));
+                () -> sendFeedback(context, sessionId, match, sendV, sendA, false));
     }
 
     private static void savePredictionThen(Context context, boolean event,
@@ -883,9 +902,9 @@ public final class MemberApiManager {
     }
 
     private static void sendFeedback(Context context, long sessionId, String match,
-                                     String reasonCode, Float cv, Float ca, boolean allowRetry) {
+                                     Float cv, Float ca, boolean allowRetry) {
         MemberApiClient.service(context).submitFeedback(sessionId,
-                        new ApiModels.FeedbackRequest(match, reasonCode, cv, ca,
+                        new ApiModels.FeedbackRequest(match, cv, ca,
                                 System.currentTimeMillis()))
                 .enqueue(new Callback<ApiModels.ApiResponse<JsonElement>>() {
                     @Override
@@ -906,8 +925,7 @@ public final class MemberApiManager {
                             if (allowRetry && isPredictionMissing(response.code(), body)) {
                                 new SessionManager(context).setPredictionSaved(0L);
                                 Log.d(TAG, "submitFeedback retry after saving prediction");
-                                retryFeedbackAfterPrediction(context, sessionId, match,
-                                        reasonCode, cv, ca);
+                                retryFeedbackAfterPrediction(context, sessionId, match, cv, ca);
                                 return;
                             }
                             showToast(context, "피드백 제출 실패: " + detail);
@@ -930,14 +948,14 @@ public final class MemberApiManager {
     }
 
     private static void retryFeedbackAfterPrediction(Context context, long sessionId, String match,
-                                                     String reasonCode, Float cv, Float ca) {
+                                                     Float cv, Float ca) {
         SessionManager session = new SessionManager(context);
         savePrediction(context, session.getCurrentSessionId(true) == sessionId,
                 session.getLastPredictionValence(), session.getLastPredictionArousal(),
                 new ResultCallback<Void>() {
                     @Override
                     public void onSuccess(Void ignored) {
-                        sendFeedback(context, sessionId, match, reasonCode, cv, ca, false);
+                        sendFeedback(context, sessionId, match, cv, ca, false);
                     }
 
                     @Override
@@ -1101,6 +1119,13 @@ public final class MemberApiManager {
             else showToast(context, msg);
             return;
         }
+        SessionManager session = new SessionManager(context);
+        if (session.isPredictionSaved(sessionId)) {
+            String msg = "결과를 확인한 뒤에는 설문을 다시 제출할 수 없어요.";
+            if (callback != null) callback.onError(msg);
+            else showToast(context, msg);
+            return;
+        }
         // EMA 는 Nandy 가중합 원시값이라 예측 좌표와 스케일이 다르다 (-4 ~ 4)
         float v = safeFloat(valence, -4f, 4f);
         float a = safeFloat(arousal, -4f, 4f);
@@ -1165,6 +1190,13 @@ public final class MemberApiManager {
         }
         if (durationSec <= 0) {
             String msg = "녹음 길이가 0초라 음성 일기를 전송하지 못했습니다.";
+            if (callback != null) callback.onError(msg);
+            else showToast(context, msg);
+            return;
+        }
+        SessionManager session = new SessionManager(context);
+        if (session.isPredictionSaved(sessionId)) {
+            String msg = "결과를 확인한 뒤에는 마음일기를 다시 저장할 수 없어요.";
             if (callback != null) callback.onError(msg);
             else showToast(context, msg);
             return;
@@ -1378,7 +1410,13 @@ public final class MemberApiManager {
                 return "설문 문항이 아직 준비되지 않았습니다.";
             }
             if ("E00205".equals(body.code)) {
-                return "오늘 오전/오후 심박변이도가 서버에 저장된 뒤에 추가 측정을 할 수 있습니다.";
+                return "오늘 오전 또는 오후 세션을 완료한 뒤에 추가 측정을 할 수 있습니다.";
+            }
+            if ("E00203".equals(body.code)) {
+                return "오늘은 추가 측정을 더 할 수 없습니다. (하루 5회, 보류로 끝난 측정도 포함)";
+            }
+            if ("E00802".equals(body.code)) {
+                return "일치하거나 모르겠다고 한 경우에는 다른 위치를 보낼 수 없습니다.";
             }
         }
         if (body != null) {

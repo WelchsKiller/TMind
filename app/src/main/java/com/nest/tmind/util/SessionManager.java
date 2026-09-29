@@ -329,7 +329,7 @@ public class SessionManager {
         return sp.getBoolean(KEY_EVENT_AVAILABLE_REMOTE, false);
     }
 
-    /** VALID / ""(미수행). SKIPPED 는 서버에서 제거됨. */
+    /** VALID / INVALID / ""(미수행). */
     public void setRemoteHrvStatus(String status) {
         sp.edit().putString(KEY_HRV_STATUS, status != null ? status : "").apply();
     }
@@ -340,6 +340,10 @@ public class SessionManager {
 
     public boolean isRemoteHrvValid() {
         return "VALID".equalsIgnoreCase(getRemoteHrvStatus());
+    }
+
+    public boolean isRemoteHrvInvalid() {
+        return "INVALID".equalsIgnoreCase(getRemoteHrvStatus());
     }
 
     public boolean isRemoteHrvDone() {

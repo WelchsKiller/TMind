@@ -87,8 +87,7 @@ final class AfterMissionSaved {
     }
 
     static boolean isTodayTrioDone(ApiModels.TodayResponse data) {
-        return data != null
-                && Boolean.TRUE.equals(data.hrvDone)
+        return MemberApiManager.isTodayHrvValid(data)
                 && Boolean.TRUE.equals(data.emaDone)
                 && Boolean.TRUE.equals(data.diaryDone);
     }
@@ -105,14 +104,10 @@ final class AfterMissionSaved {
             return EmaQuestionBank.SessionType.EVENT.name();
         }
         ApiModels.TodayResponse today = MemberApiManager.lastToday();
-        if (today != null && today.currentType != null) {
-            switch (today.currentType.trim().toUpperCase()) {
-                case "PM":
-                case "AFTERNOON":
-                    return EmaQuestionBank.SessionType.AFTERNOON.name();
-                default:
-                    return EmaQuestionBank.SessionType.MORNING.name();
-            }
+        if (today != null) {
+            EmaQuestionBank.SessionType fromServer =
+                    EmaQuestionBank.fromServerType(today.currentType);
+            if (fromServer != null) return fromServer.name();
         }
         return MissionManager.mainSessionByHour() == MissionManager.Session.AFTERNOON
                 ? EmaQuestionBank.SessionType.AFTERNOON.name()

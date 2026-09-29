@@ -70,6 +70,27 @@ public final class EmaQuestionBank {
     private EmaQuestionBank() {
     }
 
+    /** /today currentType → 설문 세트. 모르면 null. */
+    public static SessionType fromServerType(String currentType) {
+        if (currentType == null || currentType.trim().isEmpty()) return null;
+        switch (currentType.trim().toUpperCase()) {
+            case "PM":
+            case "AFTERNOON":
+                return SessionType.AFTERNOON;
+            case "AM":
+            case "MORNING":
+                return SessionType.MORNING;
+            case "BASELINE":
+                return SessionType.BASELINE;
+            case "FOLLOWUP":
+                return SessionType.FOLLOWUP;
+            case "EVENT":
+                return SessionType.EVENT;
+            default:
+                return null;
+        }
+    }
+
     /** 현재 시각 기준 일일 EMA (메인): 오전/오후. 추가는 EVENT 별도. */
     public static SessionType dailyTypeNow() {
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);

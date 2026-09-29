@@ -81,18 +81,27 @@ public final class ApiModels {
         public Boolean hrvDone;
         public Boolean emaDone;
         public Boolean diaryDone;
-        /** VALID. 아직이면 null. 예측 저장 전에는 재측정 가능. */
+        /** VALID / INVALID. 수행 전이면 null. INVALID 여도 그날 재측정 가능. */
         public String hrvStatus;
         public int totalCount;
         public int completedCount;
         /** 관리자 추가 측정 on/off. 추가 측정 버튼 판정에 쓰지 않는다. */
         public boolean eventActive;
-        /** 이 참여자가 지금 추가 측정을 할 수 있는지. 추가 측정 버튼 활성/비활성. */
+        /**
+         * 추가 측정 버튼 on/off.
+         * 당일 오전·오후 중 1개를 끝내고 예측·피드백까지 도착해야 true.
+         */
         public Boolean eventAvailable;
         /** 이벤트 on 일 때 화면 안내. 꺼져 있으면 null. */
         public String eventGuideText;
-        /** 연구 기간 중 세션을 완료한 날 수. 하루에 여러 번 해도 1일로 센다. */
+        /** 반복측정(오전/오후)을 완료한 날 수. Baseline/Follow-up 은 세지 않는다. */
         public Integer participatedDays;
+        /**
+         * 반복측정 1일차부터 날짜순 7칸.
+         * 1=안함, 2=오전/오후 중 1개, 3=1개+추가, 4=오전+오후, 5=둘 다+추가.
+         * Baseline 전에는 모두 1.
+         */
+        public List<Integer> stars;
         /** 서버가 세션 판정에 사용한 오늘 날짜 yyyy-MM-dd */
         public String serverDate;
     }
@@ -186,19 +195,16 @@ public final class ApiModels {
 
     public static final class FeedbackRequest {
         public final String matchResult;
-        /** MISMATCH 일 때만 전송 */
-        public final String reasonCode;
-        /** MISMATCH 일 때만 전송. -1.2 ~ 1.2 */
+        /** MISMATCH 일 때만 전송. -1.2 ~ 1.2. MATCH/UNKNOWN 에 넣으면 E00802. */
         public final Float correctedValence;
         /** MISMATCH 일 때만 전송. -1.2 ~ 1.2 */
         public final Float correctedArousal;
         /** 필수. epoch milliseconds */
         public final long occurredAt;
 
-        public FeedbackRequest(String matchResult, String reasonCode,
+        public FeedbackRequest(String matchResult,
                                Float correctedValence, Float correctedArousal, long occurredAt) {
             this.matchResult = matchResult;
-            this.reasonCode = reasonCode;
             this.correctedValence = correctedValence;
             this.correctedArousal = correctedArousal;
             this.occurredAt = occurredAt;

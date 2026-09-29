@@ -62,7 +62,7 @@ public class EmaIntroActivity extends BaseSeniorActivity {
         btnStart.setOnClickListener(v -> loadServerQuestionsAndStart());
     }
 
-    /** HRV/skip 가 끝난 세션에서만 문항을 받는다. */
+    /** VALID HRV 가 끝난 세션에서만 문항을 받는다. INVALID 는 재측정 대상. */
     private void loadServerQuestionsAndStart() {
         MissionManager mm = new MissionManager(this);
         boolean event = mm.isAdditionalMeasureMode()
@@ -70,21 +70,23 @@ public class EmaIntroActivity extends BaseSeniorActivity {
         if (event) {
             mm.setAdditionalMeasureMode(true);
         }
-        MissionManager.Session missionSession = event
-                ? MissionManager.Session.EVENT
-                : MissionManager.mainSessionByHour();
         SessionManager sm = new SessionManager(this);
-        boolean hrvDone;
+        long sid = sm.getCurrentSessionId(event);
+        if (sid > 0 && sm.isPredictionSaved(sid)) {
+            Toast.makeText(this, R.string.mission_locked_after_result, Toast.LENGTH_LONG).show();
+            return;
+        }
+        boolean hrvValid;
         if (event) {
-            hrvDone = mm.isHrvDone(MissionManager.Session.EVENT);
+            hrvValid = mm.isHrvDone(MissionManager.Session.EVENT);
         } else {
-            hrvDone = mm.isHrvDone(missionSession) || sm.isRemoteHrvDone();
             ApiModels.TodayResponse today = MemberApiManager.lastToday();
-            if (today != null && Boolean.TRUE.equals(today.hrvDone)) {
-                hrvDone = true;
+            hrvValid = sm.isRemoteHrvDone() || MemberApiManager.isTodayHrvValid(today);
+            if (sm.isRemoteHrvInvalid() || MemberApiManager.isTodayHrvInvalid(today)) {
+                hrvValid = false;
             }
         }
-        if (!hrvDone) {
+        if (!hrvValid) {
             Toast.makeText(this, R.string.ema_need_hrv_first, Toast.LENGTH_LONG).show();
             return;
         }
