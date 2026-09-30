@@ -91,7 +91,7 @@ public class LoginActivity extends BaseSeniorActivity {
         }
         final String phone = code.toString();
         setLoading(true);
-        MemberApiManager.loginAndConsent(this, phone, new MemberApiManager.ResultCallback<ApiModels.TokenPair>() {
+        MemberApiManager.login(this, phone, new MemberApiManager.ResultCallback<ApiModels.TokenPair>() {
             @Override
             public void onSuccess(ApiModels.TokenPair data) {
                 runOnUiThread(() -> {

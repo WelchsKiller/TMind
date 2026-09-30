@@ -79,7 +79,7 @@ public final class MemberApiManager {
         void onError(String message);
     }
 
-    public static void loginAndConsent(Context context, String code, ResultCallback<ApiModels.TokenPair> callback) {
+    public static void login(Context context, String code, ResultCallback<ApiModels.TokenPair> callback) {
         MemberApiClient.service(context).login(new ApiModels.MemberLoginRequest(code))
                 .enqueue(new Callback<ResponseBody>() {
                     @Override
@@ -92,70 +92,12 @@ public final class MemberApiManager {
                         SessionManager session = new SessionManager(context);
                         session.setTokens(pair.accessToken, pair.refreshToken);
                         Log.i(TAG, "login ok, tokens saved");
-                        runConsentThenRefresh(context, session, callback);
+                        callback.onSuccess(pair);
                     }
 
                     @Override
                     public void onFailure(Call<ResponseBody> call, Throwable t) {
                         callback.onError("서버에 연결할 수 없습니다.");
-                    }
-                });
-    }
-
-    /** 연구 참여 동의 → (필요 시) refresh 로 CONSENTED 토큰 확보 */
-    private static void runConsentThenRefresh(Context context, SessionManager session,
-                                              ResultCallback<ApiModels.TokenPair> callback) {
-        MemberApiClient.service(context).consent().enqueue(new Callback<ResponseBody>() {
-            @Override
-            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                ApiModels.TokenPair consented = parseTokenResponse(response);
-                if (response.isSuccessful() && consented != null) {
-                    session.setTokens(consented.accessToken, consented.refreshToken);
-                    Log.i(TAG, "consent ok, tokens updated");
-                    refreshTokens(context, session, consented, callback);
-                    return;
-                }
-                if (response.code() == 404) {
-                    callback.onError("진행 중인 연구 참여 회차가 없습니다. 관리자에게 문의해 주세요.");
-                    return;
-                }
-                callback.onError(httpErrorMessage(response,
-                        "참여 동의에 실패했습니다. 다시 로그인해 주세요."));
-            }
-
-            @Override
-            public void onFailure(Call<ResponseBody> call, Throwable t) {
-                callback.onError("참여 동의 요청에 실패했습니다.");
-            }
-        });
-    }
-
-    private static void refreshTokens(Context context, SessionManager session,
-                                      ApiModels.TokenPair fallback,
-                                      ResultCallback<ApiModels.TokenPair> callback) {
-        String refresh = session.getRefreshToken();
-        if (refresh == null || refresh.isEmpty()) {
-            callback.onSuccess(fallback);
-            return;
-        }
-        MemberApiClient.service(context).refresh(new ApiModels.RefreshRequest(refresh))
-                .enqueue(new Callback<ResponseBody>() {
-                    @Override
-                    public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
-                        ApiModels.TokenPair refreshed = parseTokenResponse(response);
-                        if (response.isSuccessful() && refreshed != null) {
-                            session.setTokens(refreshed.accessToken, refreshed.refreshToken);
-                            Log.i(TAG, "refresh ok after consent");
-                            callback.onSuccess(refreshed);
-                            return;
-                        }
-                        // refresh 실패해도 consent 토큰으로 진행
-                        callback.onSuccess(fallback);
-                    }
-
-                    @Override
-                    public void onFailure(Call<ResponseBody> call, Throwable t) {
-                        callback.onSuccess(fallback);
                     }
                 });
     }
@@ -198,7 +140,7 @@ public final class MemberApiManager {
                 ApiModels.ApiResponse<ApiModels.TodayResponse> body = response.body();
                 if (!response.isSuccessful() || body == null || !body.isSuccess()) {
                     if (callback != null) {
-                        callback.onError(errorMessage(body, response.code(), "오늘 세션 정보를 불러오지 못했습니다."));
+                        callback.onError(errorMessage(response, body, "오늘 세션 정보를 불러오지 못했습니다."));
                     }
                     return;
                 }
@@ -337,7 +279,7 @@ public final class MemberApiManager {
                         }
                         ApiModels.ApiResponse<ApiModels.ParticipationResponse> body = response.body();
                         if (!response.isSuccessful() || body == null || !body.isSuccess()) {
-                            callback.onError(errorMessage(body, response.code(), "참여 현황을 불러오지 못했습니다."));
+                            callback.onError(errorMessage(response, body, "참여 현황을 불러오지 못했습니다."));
                             return;
                         }
                         callback.onSuccess(body.data);
@@ -1245,7 +1187,7 @@ public final class MemberApiManager {
     }
 
     /**
-     * 동의/인증 실패 시 자동 로그아웃 후 8자리 로그인 화면으로 이동.
+     * 인증 실패 시 자동 로그아웃 후 8자리 로그인 화면으로 이동.
      * @return always true (호출부에서 early-return 용)
      */
     public static boolean forceRelogin(Context context, String message) {
@@ -1272,14 +1214,10 @@ public final class MemberApiManager {
         if (httpCode == 401) {
             return forceRelogin(context, "인증이 만료되었습니다. 다시 로그인해 주세요.");
         }
-        if (httpCode == 403) {
-            String detail = httpErrorMessage(response, "연구 참여 동의가 필요합니다.");
-            return forceRelogin(context, detail);
-        }
         return false;
     }
 
-    /** 로그인/동의/refresh 응답: 루트 TokenPair 또는 ApiResponse.data 모두 지원 */
+    /** 로그인/refresh 응답: 루트 TokenPair 또는 ApiResponse.data 모두 지원 */
     public static ApiModels.TokenPair parseTokenResponse(Response<ResponseBody> response) {
         if (response == null) return null;
         try {
@@ -1368,6 +1306,9 @@ public final class MemberApiManager {
         if (raw == null || raw.isEmpty()) return null;
         try {
             ApiModels.ApiResponse<?> err = GSON.fromJson(raw, ApiModels.ApiResponse.class);
+            if (err != null && "E00401".equals(err.code)) {
+                return "진행 중인 연구 기간이 없습니다. 관리자에게 문의해 주세요.";
+            }
             if (err != null && err.message != null && !err.message.isEmpty()) {
                 if (err.code != null && !err.code.isEmpty()) {
                     return err.message + " (" + err.code + ")";
@@ -1376,15 +1317,7 @@ public final class MemberApiManager {
             }
             com.google.gson.JsonObject obj = GSON.fromJson(raw, com.google.gson.JsonObject.class);
             if (obj != null && obj.has("message") && !obj.get("message").isJsonNull()) {
-                String msg = obj.get("message").getAsString();
-                if (obj.has("error") && !obj.get("error").isJsonNull()) {
-                    String errCode = obj.get("error").getAsString();
-                    if ("CONSENT_REQUIRED".equals(errCode)) {
-                        return "연구 참여 동의가 필요합니다. 다시 로그인해 주세요.";
-                    }
-                    return msg;
-                }
-                return msg;
+                return obj.get("message").getAsString();
             }
         } catch (Exception ignored) {
         }
@@ -1397,8 +1330,12 @@ public final class MemberApiManager {
         return "MISMATCH";
     }
 
-    private static String errorMessage(ApiModels.ApiResponse<?> body, int httpCode, String fallback) {
-        return apiErrorMessage(body, httpCode, fallback);
+    private static String errorMessage(Response<?> response, ApiModels.ApiResponse<?> body,
+                                       String fallback) {
+        if (body != null) {
+            return apiErrorMessage(body, response != null ? response.code() : 0, fallback);
+        }
+        return httpErrorMessage(response, fallback);
     }
 
     private static String apiErrorMessage(ApiModels.ApiResponse<?> body, int httpCode, String fallback) {
@@ -1418,6 +1355,9 @@ public final class MemberApiManager {
             if ("E00802".equals(body.code)) {
                 return "일치하거나 모르겠다고 한 경우에는 다른 위치를 보낼 수 없습니다.";
             }
+            if ("E00401".equals(body.code)) {
+                return "진행 중인 연구 기간이 없습니다. 관리자에게 문의해 주세요.";
+            }
         }
         if (body != null) {
             if (body.message != null && !body.message.isEmpty()) {
@@ -1431,7 +1371,8 @@ public final class MemberApiManager {
             }
         }
         if (httpCode == 401) return "인증이 만료되었습니다. 다시 로그인해 주세요.";
-        if (httpCode == 403) return "연구 참여 동의가 필요합니다. 다시 로그인해 주세요.";
+        if (httpCode == 403) return "권한이 없습니다. 다시 로그인해 주세요.";
+        if (httpCode == 404) return "요청한 정보를 찾을 수 없습니다.";
         if (httpCode > 0) return fallback + " (HTTP " + httpCode + ")";
         return fallback;
     }

@@ -274,7 +274,7 @@ public class SessionManager {
                 .commit();
     }
 
-    /** 동의/인증 실패 시: 토큰·로그인 플래그 해제 후 키패드 로그인으로 */
+    /** 인증 실패 시: 토큰·로그인 플래그 해제 후 키패드 로그인으로 */
     public void clearAuthForRelogin() {
         sp.edit()
                 .putBoolean(KEY_LOGGED_IN, false)

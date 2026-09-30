@@ -31,9 +31,6 @@ public interface MemberApiService {
     @POST("/api/member/auth/logout")
     Call<ResponseBody> logout(@Body ApiModels.RefreshRequest request);
 
-    @POST("/api/member/consent")
-    Call<ResponseBody> consent();
-
     @GET("/api/member/today")
     Call<ApiModels.ApiResponse<ApiModels.TodayResponse>> getToday();
 
