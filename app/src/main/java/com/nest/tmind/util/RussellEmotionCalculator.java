@@ -95,4 +95,15 @@ public final class RussellEmotionCalculator {
     public static float clamp(float v, float min, float max) {
         return Math.max(min, Math.min(max, v));
     }
+
+    /**
+     * 예측·피드백 좌표 서버 구간은 -1.2 ~ 1.2 이다.
+     * 축 끝의 1.2f 는 JSON/float 왕복에서 1.2 를 넘어 E00601 이 되므로 1.199 로 붙인다.
+     */
+    public static float clampServerAxis(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value)) return 0f;
+        if (value >= 1.2f) return 1.199f;
+        if (value <= -1.2f) return -1.199f;
+        return value;
+    }
 }

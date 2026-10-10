@@ -9,6 +9,8 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 
+import com.nest.tmind.util.RussellEmotionCalculator;
+
 /**
  * Russell circumplex 사분면 UI.
  * 가로=쾌–불쾌, 세로=각성–비각성 (Russell circumplex).
@@ -81,8 +83,8 @@ public class RussellCircumplexView extends View {
     }
 
     public void setPoint(float valence, float arousal) {
-        this.valence = clamp(valence, -1.2f, 1.2f);
-        this.arousal = clamp(arousal, -1.2f, 1.2f);
+        this.valence = RussellEmotionCalculator.clampServerAxis(valence);
+        this.arousal = RussellEmotionCalculator.clampServerAxis(arousal);
         this.hasPoint = true;
         invalidate();
     }
@@ -246,7 +248,11 @@ public class RussellCircumplexView extends View {
         if (half <= 0) return new float[]{0f, 0f};
         float nv = clamp((x - cx) / half, -1f, 1f);
         float na = clamp((cy - y) / half, -1f, 1f);
-        return new float[]{nv * 1.2f, na * 1.2f};
+        // 축 끝은 ±1.2 에 해당한다. 서버 상한을 넘지 않게 1.199 로 자른다.
+        return new float[]{
+                RussellEmotionCalculator.clampServerAxis(nv * 1.2f),
+                RussellEmotionCalculator.clampServerAxis(na * 1.2f)
+        };
     }
 
     private float dp(float v) {

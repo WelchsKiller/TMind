@@ -62,10 +62,10 @@ public class EmotionEditActivity extends BaseSeniorActivity {
             i.putExtra(FeedbackActivity.EXTRA_CHOICE, "disagree");
             i.putExtra(FeedbackActivity.EXTRA_CORRECTED_VALENCE, valence);
             i.putExtra(FeedbackActivity.EXTRA_CORRECTED_AROUSAL, arousal);
+            i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL,
+                    getIntent().getBooleanExtra(FeedbackActivity.EXTRA_ADDITIONAL, false));
             if (getIntent().getBooleanExtra(FeedbackActivity.EXTRA_FROM_HRV, false)) {
                 i.putExtra(FeedbackActivity.EXTRA_FROM_HRV, true);
-                i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL,
-                        getIntent().getBooleanExtra(FeedbackActivity.EXTRA_ADDITIONAL, false));
             }
             startActivity(i);
             finish();

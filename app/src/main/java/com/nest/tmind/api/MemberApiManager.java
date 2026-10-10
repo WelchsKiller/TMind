@@ -790,6 +790,9 @@ public final class MemberApiManager {
      */
     private static float safeFloat(float value, float min, float max) {
         if (Float.isNaN(value) || Float.isInfinite(value)) return 0f;
+        if (min == -1.2f && max == 1.2f) {
+            return com.nest.tmind.util.RussellEmotionCalculator.clampServerAxis(value);
+        }
         return Math.max(min, Math.min(max, value));
     }
 
@@ -802,7 +805,12 @@ public final class MemberApiManager {
                                       Float correctedValence, Float correctedArousal) {
         SessionManager session = new SessionManager(context);
         long sessionId = session.getCurrentSessionId(event);
-        if (sessionId <= 0) return;
+        if (sessionId <= 0) {
+            showToast(context, event
+                    ? "추가 측정 세션이 없어 피드백을 보내지 못했습니다."
+                    : "세션이 없어 피드백을 보내지 못했습니다.");
+            return;
+        }
         String match = matchResult(choice);
         Float cv = null;
         Float ca = null;

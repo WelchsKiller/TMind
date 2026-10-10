@@ -78,10 +78,9 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
         btnYes.setOnClickListener(v -> goFeedback("agree"));
         btnNo.setOnClickListener(v -> {
             Intent i = new Intent(this, EmotionEditActivity.class);
+            i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL, isAdditional());
             if (getIntent().getBooleanExtra(EXTRA_FROM_HRV, false)) {
                 i.putExtra(FeedbackActivity.EXTRA_FROM_HRV, true);
-                i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL,
-                        getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false));
             }
             startActivity(i);
             finish();
@@ -105,13 +104,16 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
         btn.setBackgroundTintList(null);
     }
 
+    private boolean isAdditional() {
+        return getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false);
+    }
+
     private void goFeedback(String choice) {
         Intent i = new Intent(this, FeedbackActivity.class);
         i.putExtra(FeedbackActivity.EXTRA_CHOICE, choice);
+        i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL, isAdditional());
         if (getIntent().getBooleanExtra(EXTRA_FROM_HRV, false)) {
             i.putExtra(FeedbackActivity.EXTRA_FROM_HRV, true);
-            i.putExtra(FeedbackActivity.EXTRA_ADDITIONAL,
-                    getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false));
         }
         startActivity(i);
         finish();

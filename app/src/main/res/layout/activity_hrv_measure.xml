@@ -31,6 +31,17 @@
 
     <TextView android:id="@+id/tvSignal" style="@style/SeniorBody" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:layout_marginTop="8dp" android:visibility="gone" android:drawablePadding="8dp" android:text="@string/signal_good" android:textColor="@color/green_accent" />
 
+    <Button
+        android:id="@+id/btnTestQuadrant"
+        style="@style/SeniorButton"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_btn_outline"
+        android:text="@string/hrv_test_quadrant"
+        android:textColor="@color/teal_dark"
+        android:visibility="gone" />
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="200dp"
@@ -96,14 +107,5 @@
         </LinearLayout>
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btnTestQuadrant"
-        style="@style/SeniorButton"
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:layout_marginTop="12dp"
-        android:background="@drawable/bg_btn_outline"
-        android:text="@string/hrv_test_quadrant"
-        android:textColor="@color/teal_dark"
-        android:visibility="gone" />
+
 </LinearLayout>

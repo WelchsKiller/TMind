@@ -45,9 +45,10 @@ public class FeedbackActivity extends BaseSeniorActivity {
             correctedV = getIntent().getFloatExtra(EXTRA_CORRECTED_VALENCE, 0f);
             correctedA = getIntent().getFloatExtra(EXTRA_CORRECTED_AROUSAL, 0f);
         }
-        MemberApiManager.submitFeedback(this,
-                getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false),
-                choice, correctedV, correctedA);
+        boolean additional = getIntent().hasExtra(EXTRA_ADDITIONAL)
+                ? getIntent().getBooleanExtra(EXTRA_ADDITIONAL, false)
+                : new MissionManager(this).isAdditionalMeasureMode();
+        MemberApiManager.submitFeedback(this, additional, choice, correctedV, correctedA);
 
         if (new MissionManager(this).isAllDone()) {
             tvDone.setText(R.string.mission_complete);
