@@ -185,6 +185,7 @@ public class EcgBleService extends Service {
     public void stopMeasurementAndDisconnect() {
         autoConnectEnabled = false;
         freshMeasureMode = false;
+        cancelPendingConnect();
         measuring = false;
         writeAscii(CMD_STOP_MEASURE);
         latestHr = null;
@@ -315,6 +316,12 @@ public class EcgBleService extends Service {
 
     private int scanAttempt = 0;
     private static final int MAX_SCAN_ATTEMPTS = 3;
+    private Runnable pendingConnect;
+
+    /** Android 13(API 33) 이하. 스캔 직후 연결·짧은 서비스 검색에서 GATT 133이 자주 난다. */
+    private static boolean needsSlowGatt() {
+        return Build.VERSION.SDK_INT <= Build.VERSION_CODES.TIRAMISU;
+    }
 
     private volatile boolean freshMeasureMode = false;
     private volatile boolean autoConnectEnabled = false;
@@ -512,7 +519,7 @@ public class EcgBleService extends Service {
                 if (nameToCheck.contains(k)) {
                     if (best == null || r.getRssi() > best.getRssi()) best = r;
                     stopScan();
-                    connect(best.getDevice());
+                    scheduleConnect(best.getDevice());
                     return;
                 }
             }
@@ -547,7 +554,7 @@ public class EcgBleService extends Service {
         scanTimeout = () -> {
             stopScan();
             if (best != null) {
-                connect(best.getDevice());
+                scheduleConnect(best.getDevice());
             } else {
                 if (++scanAttempt < MAX_SCAN_ATTEMPTS) {
                     h.postDelayed(new Runnable() {
@@ -579,9 +586,35 @@ public class EcgBleService extends Service {
         if (scanTimeout != null) h.removeCallbacks(scanTimeout);
     }
 
+    private void cancelPendingConnect() {
+        if (pendingConnect != null && h != null) {
+            h.removeCallbacks(pendingConnect);
+        }
+        pendingConnect = null;
+    }
+
+    /** Android 13 이하는 스캔 라디오가 풀린 뒤에 connectGatt 한다. */
+    private void scheduleConnect(final BluetoothDevice device) {
+        cancelPendingConnect();
+        if (device == null) return;
+        pendingConnect = new Runnable() {
+            @Override
+            public void run() {
+                pendingConnect = null;
+                connect(device);
+            }
+        };
+        if (needsSlowGatt()) {
+            h.postDelayed(pendingConnect, 600);
+        } else {
+            h.post(pendingConnect);
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private void connect(BluetoothDevice d) {
         if (isConnecting || d == null) return;
+        if (!autoConnectEnabled && !freshMeasureMode) return;
 
         // 새로 연결 시도 → 아직 준비 안됨
         EcgConfig.isBleReady = false;
@@ -596,12 +629,25 @@ public class EcgBleService extends Service {
                     .putString("last_device", lastDeviceAddress)
                     .apply();
 
-            gatt = d.connectGatt(
-                    getApplicationContext(),
-                    false,
-                    gattCb,                       // 기존 콜백 그대로 사용
-                    BluetoothDevice.TRANSPORT_LE
-            );
+            if (needsSlowGatt() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // 콜백을 메인 스레드로 고정하고, 1M PHY로만 붙는다.
+                // Android 13 태블릿은 스캔 직후 2M 협상에서 status 133이 난다.
+                gatt = d.connectGatt(
+                        this,
+                        false,
+                        gattCb,
+                        BluetoothDevice.TRANSPORT_LE,
+                        BluetoothDevice.PHY_LE_1M,
+                        h
+                );
+            } else {
+                gatt = d.connectGatt(
+                        this,
+                        false,
+                        gattCb,
+                        BluetoothDevice.TRANSPORT_LE
+                );
+            }
         } catch (SecurityException e) {
             isConnecting = false;
             toast("연결 권한 필요");
@@ -617,17 +663,19 @@ public class EcgBleService extends Service {
                 MetricsManager.getInstance().onBleConnected();
 
                 isConnecting = false;
-                try {
-                    g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
-                } catch (Exception ignore) {
+                // Android 13 이하는 링크가 안정되기 전 priority 요청이 133을 유발한다.
+                if (!needsSlowGatt()) {
+                    try {
+                        g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
+                    } catch (Exception ignore) {
+                    }
                 }
-                // Galaxy A50 등 구버전: 서비스 검색 전 대기 시간 확보
-                long discoverDelayMs = (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) ? 1200 : 600;
+                final long discoverDelayMs = needsSlowGatt() ? 1500 : 600;
                 h.postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         try {
-                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                            if (needsSlowGatt()) {
                                 refreshCache(g);
                             }
                             g.discoverServices();
@@ -642,6 +690,9 @@ public class EcgBleService extends Service {
                 isConnecting = false;
                 EcgConfig.isBleReady = false;
                 closeGatt();
+                if (freshMeasureMode) scanAttempt++;
+                toast("연결 재시도(status=" + status + ")");
+                final long retryDelayMs = needsSlowGatt() ? 1800 : 1000;
                 h.postDelayed(new Runnable() {
                     @Override
                     public void run() {
@@ -653,7 +704,7 @@ public class EcgBleService extends Service {
                             dispatchConnectionFailed();
                         }
                     }
-                }, 1000);
+                }, retryDelayMs);
                 return;
             }
             if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -721,6 +772,12 @@ public class EcgBleService extends Service {
                 return;
             }
 
+            if (needsSlowGatt()) {
+                try {
+                    g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
+                } catch (Exception ignore) {
+                }
+            }
             try {
                 // A50 등 구형 기기: MTU 요청 실패해도 측정 계속
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -1162,6 +1219,7 @@ public class EcgBleService extends Service {
 
     @SuppressLint("MissingPermission")
     private void closeGatt() {
+        cancelPendingConnect();
         if (gatt != null) {
             try {
                 gatt.disconnect();

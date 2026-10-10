@@ -493,7 +493,6 @@ public class DashboardActivity extends BaseSeniorActivity {
                             participation = data;
                             btnWeeklyTrend.setVisibility(
                                     participatedDays() >= 7 ? View.VISIBLE : View.GONE);
-                            renderStars();
                         });
                     }
 
@@ -575,20 +574,11 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
     }
 
-    /** /today stars 가 있으면 그대로 쓰고, 없으면 참여 현황 days 로 맞춘다. */
+    /** /today stars 7칸만 사용. 값이 없거나 짧으면 나머지는 빈 별(1). */
     private int[] starStates() {
-        if (today != null && today.stars != null && !today.stars.isEmpty()) {
-            return starStatesFromToday();
-        }
-        return starStatesFromParticipation();
-    }
-
-    /**
-     * 서버 stars: 1=안함, 2=반, 3=반+추가, 4=가득, 5=가득+추가.
-     * 반복측정 1일차부터 날짜순 7칸. 빈 날도 건너뛰지 않는다.
-     */
-    private int[] starStatesFromToday() {
         int[] row = new int[7];
+        for (int i = 0; i < 7; i++) row[i] = MissionManager.STAR_EMPTY;
+        if (today == null || today.stars == null) return row;
         int n = Math.min(7, today.stars.size());
         for (int i = 0; i < n; i++) {
             Integer v = today.stars.get(i);
@@ -610,43 +600,6 @@ public class DashboardActivity extends BaseSeniorActivity {
             default:
                 return MissionManager.STAR_EMPTY;
         }
-    }
-
-    /** 예전 참여 현황 days 폴백. */
-    private int[] starStatesFromParticipation() {
-        int[] row = new int[7];
-        if (participation == null || participation.period == null
-                || participation.period.days == null || participation.period.days.isEmpty()) {
-            return row;
-        }
-        java.util.List<ApiModels.DayStatus> days = new java.util.ArrayList<>(participation.period.days);
-        java.util.Collections.sort(days, (a, b) -> {
-            String da = a != null && a.date != null ? a.date : "";
-            String db = b != null && b.date != null ? b.date : "";
-            return da.compareTo(db);
-        });
-        int filled = 0;
-        for (int i = 0; i < days.size() && filled < 7; i++) {
-            int state = starStateFromDay(days.get(i));
-            if (state != MissionManager.STAR_EMPTY) {
-                row[filled++] = state;
-            }
-        }
-        return row;
-    }
-
-    private static int starStateFromDay(ApiModels.DayStatus day) {
-        if (day == null) return MissionManager.STAR_EMPTY;
-        boolean am = day.amDone;
-        boolean pm = day.pmDone;
-        boolean bonus = day.eventDone;
-        if (am && pm) {
-            return bonus ? MissionManager.STAR_BONUS : MissionManager.STAR_FULL;
-        }
-        if (am ^ pm) {
-            return bonus ? MissionManager.STAR_HALF_BONUS : MissionManager.STAR_HALF;
-        }
-        return MissionManager.STAR_EMPTY;
     }
 
     private void setupMissionCard(View card, int iconRes, int titleRes, int subRes) {

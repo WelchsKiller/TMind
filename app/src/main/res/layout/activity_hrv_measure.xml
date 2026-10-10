@@ -46,6 +46,56 @@
 
     <TextView android:id="@+id/tvInstruction" style="@style/SeniorBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center" android:text="@string/hrv_instruction" android:textSize="18sp" />
 
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_info_box"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="14dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_info" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvFlowHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/hrv_flow_hint"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/tvFlowSteps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/hrv_flow_steps"
+                android:textColor="@color/teal_dark"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
     <Button
         android:id="@+id/btnTestQuadrant"
         style="@style/SeniorButton"
@@ -55,5 +105,5 @@
         android:background="@drawable/bg_btn_outline"
         android:text="@string/hrv_test_quadrant"
         android:textColor="@color/teal_dark"
-        android:visibility="visible" />
+        android:visibility="gone" />
 </LinearLayout>

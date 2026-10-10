@@ -123,7 +123,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         ecgView.setWaveColor(ContextCompat.getColor(this, R.color.teal_primary));
 
         findViewById(R.id.btnBack).setOnClickListener(v -> confirmExitMeasure());
-        setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvInstruction);
+        setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvInstruction, R.id.tvFlowHint, R.id.tvFlowSteps);
 
         Button btnTest = findViewById(R.id.btnTestQuadrant);
         btnTest.setBackgroundTintList(null);

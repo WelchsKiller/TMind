@@ -103,6 +103,8 @@
     <string name="dialog_retry">다시 시도</string>
     <string name="ema_submit_skipped_no_ids">서버 문항 ID가 없어 설문 결과를 서버에 보내지 못했습니다.</string>
     <string name="hrv_instruction">편하게 앉아 말씀하지 마시고\n잠시 기다려 주세요</string>
+    <string name="hrv_flow_hint">모든 단계를 완료하면 테스트 · 사분면 결과를 볼 수 있어요.</string>
+    <string name="hrv_flow_steps">심박변이도 측정 → 마음 상태 설문 → 마음일기</string>
     <string name="time_remaining">남은 시간</string>
     <string name="connecting_device">기기 연결 중입니다.</string>
     <string name="measure_starting">측정이 시작됩니다</string>
