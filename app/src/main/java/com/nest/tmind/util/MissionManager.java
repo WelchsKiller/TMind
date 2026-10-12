@@ -10,7 +10,7 @@ import java.util.Locale;
 
 /**
  * 오늘 미션: 오전/오후는 시각으로 자동 결정, 추가는 EVENT 세션.
- * 별 채움은 단말이 계산하지 않고 /today stars 7칸을 그대로 그린다.
+ * 별 채움: 오전=왼쪽, 오후=오른쪽, 둘 다=가득, 추가 측정=특수 효과.
  */
 public class MissionManager {
 
@@ -18,12 +18,14 @@ public class MissionManager {
         MORNING, AFTERNOON, EVENT
     }
 
-    /** 0=빈, 1=반, 2=가득, 3=가득+특수, 4=반+특수(추가) */
+    /** 0=빈, 1=오전(왼), 2=가득, 3=가득+특수, 4=오전+특수, 5=오후(오른), 6=오후+특수 */
     public static final int STAR_EMPTY = 0;
     public static final int STAR_HALF = 1;
     public static final int STAR_FULL = 2;
     public static final int STAR_BONUS = 3;
     public static final int STAR_HALF_BONUS = 4;
+    public static final int STAR_HALF_RIGHT = 5;
+    public static final int STAR_HALF_RIGHT_BONUS = 6;
 
     public static final int MAX_ADDITIONAL_PER_DAY = 5;
 

@@ -358,6 +358,7 @@ public class DashboardActivity extends BaseSeniorActivity {
 
         btnWeeklyTrend.setVisibility(participatedDays() >= 7 ? View.VISIBLE : View.GONE);
 
+        updateGreeting();
         refreshAdditionalCard();
         renderStars();
     }
@@ -491,6 +492,8 @@ public class DashboardActivity extends BaseSeniorActivity {
                     public void onSuccess(ApiModels.ParticipationResponse data) {
                         runOnUiThread(() -> {
                             participation = data;
+                            updateGreeting();
+                            renderStars();
                             btnWeeklyTrend.setVisibility(
                                     participatedDays() >= 7 ? View.VISIBLE : View.GONE);
                         });
@@ -521,12 +524,51 @@ public class DashboardActivity extends BaseSeniorActivity {
                 MemberApiManager.isTodayHrvValid(data),
                 Boolean.TRUE.equals(data.emaDone),
                 Boolean.TRUE.equals(data.diaryDone));
-        if (data.missedType != null && !data.missedType.trim().isEmpty()) {
-            tvGreeting.setText(getString(R.string.dashboard_missed_session, data.missedType));
-        } else {
-            tvGreeting.setText(R.string.dashboard_greeting);
-        }
         refreshUi();
+    }
+
+    private void updateGreeting() {
+        tvGreeting.setText(greetingForToday());
+    }
+
+    private String greetingForToday() {
+        String type = today != null && today.currentType != null
+                ? today.currentType.trim().toUpperCase()
+                : "";
+        if ("AM".equals(type) || "MORNING".equals(type)) {
+            return getString(R.string.dashboard_greeting_am_start);
+        }
+        if ("PM".equals(type) || "AFTERNOON".equals(type)) {
+            if (isMissedMorning()) {
+                return getString(R.string.dashboard_greeting_am_missed);
+            }
+            return getString(R.string.dashboard_greeting_pm_start);
+        }
+        if (isAmPmBothDone()) {
+            return getString(R.string.dashboard_greeting_am_pm_done);
+        }
+        return getString(R.string.dashboard_greeting);
+    }
+
+    private boolean isMissedMorning() {
+        if (today == null || today.missedType == null) return false;
+        String missed = today.missedType.trim().toUpperCase();
+        return "AM".equals(missed) || "MORNING".equals(missed);
+    }
+
+    /** 오전·오후를 모두 끝낸 뒤에만 완료 문구를 쓴다. 오전만 끝난 아침에는 쓰지 않는다. */
+    private boolean isAmPmBothDone() {
+        if (participation != null && participation.today != null
+                && participation.today.amDone && participation.today.pmDone) {
+            return true;
+        }
+        if (today == null) return false;
+        if (today.currentType != null && !today.currentType.trim().isEmpty()) {
+            return false;
+        }
+        return participatedDays() > 0
+                && MissionManager.mainSessionByHour() == MissionManager.Session.AFTERNOON
+                && isTodayAllDone();
     }
 
     private static MissionManager.Session mapCurrentType(String currentType) {
@@ -565,6 +607,10 @@ public class DashboardActivity extends BaseSeniorActivity {
                 iv.setImageResource(R.drawable.ic_star_filled);
             } else if (state == MissionManager.STAR_HALF_BONUS) {
                 iv.setImageResource(R.drawable.ic_star_half_bonus);
+            } else if (state == MissionManager.STAR_HALF_RIGHT_BONUS) {
+                iv.setImageResource(R.drawable.ic_star_half_right_bonus);
+            } else if (state == MissionManager.STAR_HALF_RIGHT) {
+                iv.setImageResource(R.drawable.ic_star_half_right);
             } else if (state == MissionManager.STAR_HALF) {
                 iv.setImageResource(R.drawable.ic_star_half);
             } else {
@@ -574,19 +620,91 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
     }
 
-    /** /today stars 7칸만 사용. 값이 없거나 짧으면 나머지는 빈 별(1). */
+    /**
+     * 오전=왼쪽, 오후=오른쪽, 둘 다=가득.
+     * 추가 측정(event)이 있으면 특수 효과. AM/PM 구분은 participation days 를 우선한다.
+     */
     private int[] starStates() {
         int[] row = new int[7];
         for (int i = 0; i < 7; i++) row[i] = MissionManager.STAR_EMPTY;
-        if (today == null || today.stars == null) return row;
-        int n = Math.min(7, today.stars.size());
-        for (int i = 0; i < n; i++) {
-            Integer v = today.stars.get(i);
-            row[i] = starStateFromServer(v != null ? v : 1);
+        if (today != null && today.stars != null) {
+            int n = Math.min(7, today.stars.size());
+            for (int i = 0; i < n; i++) {
+                Integer v = today.stars.get(i);
+                row[i] = starStateFromServer(v != null ? v : 1);
+            }
         }
+        applyStarSidesFromParticipation(row);
         return row;
     }
 
+    private void applyStarSidesFromParticipation(int[] row) {
+        if (participation == null) return;
+        if (participation.period != null && participation.period.days != null) {
+            int n = Math.min(7, participation.period.days.size());
+            for (int i = 0; i < n; i++) {
+                ApiModels.DayStatus day = participation.period.days.get(i);
+                if (day == null) continue;
+                row[i] = starStateFromAmPm(day.amDone, day.pmDone, day.eventDone, serverStarAt(i));
+            }
+        }
+        if (participation.today != null) {
+            int idx = todayStarIndex();
+            if (idx >= 0 && idx < 7) {
+                boolean extra = participation.today.eventCount > 0;
+                row[idx] = starStateFromAmPm(participation.today.amDone,
+                        participation.today.pmDone, extra, serverStarAt(idx));
+            }
+        }
+    }
+
+    private int todayStarIndex() {
+        String date = today != null && today.serverDate != null ? today.serverDate.trim() : "";
+        if (!date.isEmpty() && participation != null && participation.period != null
+                && participation.period.days != null) {
+            for (int i = 0; i < Math.min(7, participation.period.days.size()); i++) {
+                ApiModels.DayStatus day = participation.period.days.get(i);
+                if (day != null && day.date != null && date.equals(day.date.trim())) {
+                    return i;
+                }
+            }
+        }
+        if (today != null && today.stars != null) {
+            int last = -1;
+            int n = Math.min(7, today.stars.size());
+            for (int i = 0; i < n; i++) {
+                Integer v = today.stars.get(i);
+                if (v != null && v > 1) last = i;
+            }
+            if (last >= 0) return last;
+        }
+        return -1;
+    }
+
+    private int serverStarAt(int index) {
+        if (today == null || today.stars == null || index < 0 || index >= today.stars.size()) {
+            return 1;
+        }
+        Integer v = today.stars.get(index);
+        return v != null ? v : 1;
+    }
+
+    private static int starStateFromAmPm(boolean amDone, boolean pmDone, boolean extra,
+                                         int serverStar) {
+        if (!extra) extra = serverStar == 3 || serverStar == 5;
+        if (amDone && pmDone) {
+            return extra ? MissionManager.STAR_BONUS : MissionManager.STAR_FULL;
+        }
+        if (amDone) {
+            return extra ? MissionManager.STAR_HALF_BONUS : MissionManager.STAR_HALF;
+        }
+        if (pmDone) {
+            return extra ? MissionManager.STAR_HALF_RIGHT_BONUS : MissionManager.STAR_HALF_RIGHT;
+        }
+        return MissionManager.STAR_EMPTY;
+    }
+
+    /** days 가 없을 때 /today stars 폴백. 2는 오전/오후 구분이 없어 왼쪽으로 둔다. */
     private static int starStateFromServer(int serverStar) {
         switch (serverStar) {
             case 2:

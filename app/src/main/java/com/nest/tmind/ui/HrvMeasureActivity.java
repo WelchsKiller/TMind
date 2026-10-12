@@ -183,6 +183,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         remainingSec = MEASURE_SEC;
         handler.removeCallbacksAndMessages(null);
         countdownRunnable = null;
+        MeasureSessionStats.reset();
     }
 
     private void showWaitingForConnectionUi() {
@@ -239,6 +240,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
                     return;
                 }
                 if (svc.startMeasurement()) {
+                    LastEcgResult.clearCurrent(HrvMeasureActivity.this);
                     ecgView.clearStreaming();
                     tvTimerLabel.setText(R.string.time_remaining);
                     tvSignal.setText(R.string.signal_waiting);
@@ -370,19 +372,8 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         // BLE 종료 전에 분석·저장해야 재측정 시 결과가 갱신됨
         saveMetrics();
         EcgResultAnalyzer.Result analyzed = EcgResultAnalyzer.analyze(this);
-        // 세션 평균만 있고 분석 실패한 경우에도 결과 화면용으로 강제 저장
         if (analyzed == null || !analyzed.valid) {
-            int hr = MeasureSessionStats.averageHr();
-            int hrv = MeasureSessionStats.averageHrvMs();
-            if (hr > 0 || hrv > 0) {
-                int stress = 0;
-                if (hrv > 0) {
-                    int hrvForScore = Math.max(20, Math.min(160, hrv));
-                    stress = Math.round(((160f - hrvForScore) / 140f) * 100f);
-                }
-                LastEcgResult.updateAndSave(this, new float[0], 250, hr, hrv,
-                        hr > 0 ? Math.round(60000f / hr) : 0, stress, System.currentTimeMillis());
-            }
+            LastEcgResult.clearCurrent(this);
         }
         stopBleCompletely();
 

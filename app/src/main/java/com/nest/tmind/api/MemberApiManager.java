@@ -475,6 +475,10 @@ public final class MemberApiManager {
             reportHrvFailure(context, callback, "세션이 없어 심박변이도를 전송하지 못했습니다.");
             return;
         }
+        if (!LastEcgResult.hasValid()) {
+            reportHrvFailure(context, callback, "측정값이 유효하지 않아 서버에 저장하지 않습니다. 다시 측정해 주세요.");
+            return;
+        }
         if (event && !isUsableEventSession(session, sessionId)) {
             reportHrvFailure(context, callback,
                     "추가 측정용 세션이 없습니다. 홈에서 추가 측정을 다시 시작해 주세요.");

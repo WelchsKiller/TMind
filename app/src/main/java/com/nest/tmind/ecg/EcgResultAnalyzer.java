@@ -12,6 +12,10 @@ import java.util.Arrays;
 public final class EcgResultAnalyzer {
 
     private static final String TAG = "EcgResultAnalyzer";
+    /** 패치 미부착·무신호는 이보다 피크가 거의 없다. 5분 실측이면 훨씬 많다. */
+    private static final int MIN_R_PEAKS = 20;
+    /** 접촉이 있어야 캡처되므로, 15초 미만이면 측정 실패로 본다. */
+    private static final int MIN_SIGNAL_SEC = 15;
 
     public static class Result {
         public float[] spike;
@@ -42,93 +46,88 @@ public final class EcgResultAnalyzer {
 
         float[] raw = EcgCapture.i().consumeAll();
         LastEcgResult.setLastRawSignal(raw);
-        boolean fromWave = false;
-        float[] displayWave = null;
-
-        if (raw != null && raw.length >= Math.max(r.fs, 400)) {
-            // 배터리·발열에 따라 샘플 다운샘플
-            float[] sampled = downsample(raw, stride);
-            // 표시용: R피크 실패해도 결과 화면에 그릴 구간 확보
-            displayWave = extractDisplaySegment(sampled, Math.max(spikeLen, r.fs * 2));
-
-            Biquad hp = Biquad.highpass(r.fs, 0.67, 0.707);
-            Biquad notch = heavy ? Biquad.notch(r.fs, 60.0, 30.0) : null;
-            Biquad lp = Biquad.lowpass(r.fs, 18.0, 0.707);
-
-            double[] x = new double[sampled.length];
-            for (int i = 0; i < sampled.length; i++) {
-                double v = sampled[i];
-                v = hp.process(v);
-                if (notch != null) v = notch.process(v);
-                v = lp.process(v);
-                x[i] = v;
-            }
-
-            // 다운샘플 시 피크 검출용 유효 fs 보정
-            int fsEff = Math.max(1, r.fs / stride);
-            ArrayList<Integer> rloc = detectRPeaks(x, fsEff);
-            if (rloc != null && rloc.size() >= 2) {
-                float[] avgBeat = averageBeat(x, fsEff, 0.20, 0.40, 200, rloc);
-                if (avgBeat != null) {
-                    avgBeat = smooth(avgBeat, level == ResourceManager.Level.LOW ? 1 : 3);
-                    r.rrMs = computeAvgRrMs(rloc, fsEff);
-                    r.hrBpm = (r.rrMs > 0) ? Math.round(60000f / r.rrMs) : 0;
-                    r.hrvMs = computeHrvMs(rloc, fsEff);
-                    r.spike = makeIconSpikeFrom(avgBeat, spikeLen);
-                    fromWave = true;
-                }
-            }
-            // R피크/평균비트 실패 시에도 원본 구간으로 그래프 표시
-            if (!fromWave && displayWave != null && displayWave.length > 10) {
-                r.spike = displayWave;
-                fromWave = true;
-                Log.i(TAG, "analyze: using raw display segment len=" + displayWave.length);
-            }
-        }
-
-        // 세션 중 기기 HR 평균이 있으면 결과 표시에 우선 사용
-        int sessionHr = MeasureSessionStats.averageHr();
-        int sessionHrv = MeasureSessionStats.averageHrvMs();
-        if (sessionHr > 0) {
-            r.hrBpm = sessionHr;
-            int sessionRr = MeasureSessionStats.averageRrMs();
-            if (sessionRr > 0) r.rrMs = sessionRr;
-            else r.rrMs = Math.round(60000f / sessionHr);
-        }
-        if (sessionHrv > 0) {
-            r.hrvMs = sessionHrv;
-        }
-
-        // 파형 분석 실패해도 세션 평균이 있으면 결과로 저장
-        if ((r.spike == null || r.spike.length == 0) && (sessionHr > 0 || sessionHrv > 0)) {
-            if (displayWave != null && displayWave.length > 10) {
-                r.spike = displayWave;
-            } else {
-                r.spike = new float[0];
-            }
-            fromWave = true;
-        }
-
-        if (!fromWave && r.hrBpm <= 0 && r.hrvMs <= 0) {
+        int minSamples = Math.max(r.fs * MIN_SIGNAL_SEC, 400);
+        if (raw == null || raw.length < minSamples) {
+            Log.i(TAG, "analyze invalid: rawSamples=" + (raw == null ? 0 : raw.length)
+                    + " need>=" + minSamples);
             r.valid = false;
             return r;
         }
 
-        // spike null 방지
+        float[] sampled = downsample(raw, stride);
+        float[] displayWave = extractDisplaySegment(sampled, Math.max(spikeLen, r.fs * 2));
+
+        Biquad hp = Biquad.highpass(r.fs, 0.67, 0.707);
+        Biquad notch = heavy ? Biquad.notch(r.fs, 60.0, 30.0) : null;
+        Biquad lp = Biquad.lowpass(r.fs, 18.0, 0.707);
+
+        double[] x = new double[sampled.length];
+        for (int i = 0; i < sampled.length; i++) {
+            double v = sampled[i];
+            v = hp.process(v);
+            if (notch != null) v = notch.process(v);
+            v = lp.process(v);
+            x[i] = v;
+        }
+
+        if (!isSignalAlive(x)) {
+            Log.i(TAG, "analyze invalid: flat/no ECG energy");
+            r.valid = false;
+            return r;
+        }
+
+        int fsEff = Math.max(1, r.fs / stride);
+        ArrayList<Integer> rloc = detectRPeaks(x, fsEff);
+        int peakCount = rloc != null ? rloc.size() : 0;
+        if (peakCount < MIN_R_PEAKS) {
+            Log.i(TAG, "analyze invalid: rPeaks=" + peakCount + " need>=" + MIN_R_PEAKS);
+            r.valid = false;
+            return r;
+        }
+
+        float[] avgBeat = averageBeat(x, fsEff, 0.20, 0.40, 200, rloc);
+        if (avgBeat != null) {
+            avgBeat = smooth(avgBeat, level == ResourceManager.Level.LOW ? 1 : 3);
+            r.spike = makeIconSpikeFrom(avgBeat, spikeLen);
+        } else if (displayWave != null) {
+            r.spike = displayWave;
+        }
+        r.rrMs = computeAvgRrMs(rloc, fsEff);
+        r.hrBpm = (r.rrMs > 0) ? Math.round(60000f / r.rrMs) : 0;
+        r.hrvMs = computeHrvMs(rloc, fsEff);
+
+        if (r.hrBpm < 40 || r.hrBpm > 180 || r.hrvMs <= 0) {
+            Log.i(TAG, "analyze invalid: hr=" + r.hrBpm + " hrv=" + r.hrvMs);
+            r.valid = false;
+            return r;
+        }
+
         if (r.spike == null) r.spike = new float[0];
 
-        int hrvForScore = 0;
         r.stressScore = 0;
-        if (r.hrvMs > 0) {
-            hrvForScore = Math.max(20, Math.min(160, r.hrvMs));
-            float scoreF = ((160f - hrvForScore) / (160f - 20f)) * 100f;
-            r.stressScore = Math.round(Math.max(0f, Math.min(100f, scoreF)));
-        }
+        int hrvForScore = Math.max(20, Math.min(160, r.hrvMs));
+        float scoreF = ((160f - hrvForScore) / (160f - 20f)) * 100f;
+        r.stressScore = Math.round(Math.max(0f, Math.min(100f, scoreF)));
 
         r.valid = true;
         LastEcgResult.updateAndSave(ctx, r.spike, r.fs, r.hrBpm, r.hrvMs, r.rrMs,
                 r.stressScore, r.measuredAt);
         return r;
+    }
+
+    /** 패치 미부착·평탄 잡음은 에너지가 거의 없다. */
+    private static boolean isSignalAlive(double[] x) {
+        if (x == null || x.length < 64) return false;
+        double mean = 0;
+        for (double v : x) mean += v;
+        mean /= x.length;
+        double var = 0;
+        for (double v : x) {
+            double d = v - mean;
+            var += d * d;
+        }
+        var /= x.length;
+        return Math.sqrt(var) >= 0.02;
     }
 
     /** 결과 화면용: 최근 구간을 잘라 표시 (피크 검출 실패 대비) */

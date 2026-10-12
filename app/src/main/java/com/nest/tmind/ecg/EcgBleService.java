@@ -345,7 +345,7 @@ public class EcgBleService extends Service {
             }
 
             dispatchHrRr(hr, hrvMs);
-            if (measuring) {
+            if (measuring && lastSignalGood) {
                 if (hr != null) MeasureSessionStats.addHr(hr);
                 if (rrMs != null) MeasureSessionStats.addRrMs(rrMs);
                 if (hrvMs != null) MeasureSessionStats.addHrvMs(hrvMs);
@@ -911,6 +911,9 @@ public class EcgBleService extends Service {
         resetStreamState();
         haveHr = false;
         beatTimerMs = 0.0;
+        latestHr = null;
+        latestRr = null;
+        rrHistoryMs.clear();
         MeasureSessionStats.reset();
         writeAscii(CMD_START_MEASURE);
         measuring = true;

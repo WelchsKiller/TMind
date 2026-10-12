@@ -17,7 +17,6 @@ import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.ecg.EcgConfig;
 import com.nest.tmind.ecg.EcgSurfaceView;
 import com.nest.tmind.ecg.LastEcgResult;
-import com.nest.tmind.ecg.MeasureSessionStats;
 import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.util.SessionManager;
 
@@ -204,34 +203,16 @@ public class HrvResultActivity extends BaseSeniorActivity {
     }
 
     private void bindLatestResult() {
-        if (!LastEcgResult.hasValid()) {
-            LastEcgResult.loadFromPrefs(this);
-        }
-
         int hr = LastEcgResult.lastHrBpm;
         int hrv = LastEcgResult.lastHrvMs;
         long at = LastEcgResult.measuredAtMs;
-
-        int sessionHr = MeasureSessionStats.averageHr();
-        int sessionHrv = MeasureSessionStats.averageHrvMs();
-        if (sessionHr > 0) hr = sessionHr;
-        if (sessionHrv > 0) hrv = sessionHrv;
         if (at <= 0) at = System.currentTimeMillis();
 
-        if (hr > 0 && (hr < 40 || hr > 180)) hr = 0;
-        if (hrv < 0) hrv = 0;
-
-        if ((hr > 0 || hrv > 0) && !LastEcgResult.hasValid()) {
-            int stress = 0;
-            if (hrv > 0) {
-                int hrvForScore = Math.max(20, Math.min(160, hrv));
-                stress = Math.round(((160f - hrvForScore) / 140f) * 100f);
-            }
-            LastEcgResult.updateAndSave(this, LastEcgResult.lastSpike, 250, hr, hrv,
-                    hr > 0 ? Math.round(60000f / hr) : 0, stress, at);
+        resultValid = LastEcgResult.hasValid();
+        if (!resultValid) {
+            hr = 0;
+            hrv = 0;
         }
-
-        resultValid = hr > 0 && hrv > 0;
 
         tvBpm.setText(hr > 0 ? String.valueOf(hr) : "--");
         tvHrvMs.setText(hrv > 0 ? String.valueOf(hrv) : "--");
@@ -241,7 +222,7 @@ public class HrvResultActivity extends BaseSeniorActivity {
             btnNext.setText(resultValid ? R.string.confirm_result : R.string.hrv_remeasure);
         }
 
-        if (LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
+        if (resultValid && LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
             final float[] spike = LastEcgResult.lastSpike;
             final int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
             Runnable draw = () -> {

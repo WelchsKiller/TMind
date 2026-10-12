@@ -29,6 +29,8 @@ public class LastEcgResult {
     public static int lastRrMs = 0;          // 마지막 RR 간격(ms)  (저장만, UI에서는 직접 안 씀)
     public static int lastStressScore = 0;   // 0~100
     public static long measuredAtMs = 0L;    // 측정 시각
+    /** 이번 측정에서 R피크가 나와 실제로 유효할 때만 true. 이전 값·기기 기본값은 안 친다. */
+    public static boolean measurementValid = false;
 
     // ────────────── 히스토리용 1건 데이터 ──────────────
     public static class DailyRecord {
@@ -61,7 +63,29 @@ public class LastEcgResult {
 
     // ────────────── 마지막 결과가 있는지 여부 ──────────────
     public static boolean hasValid() {
-        return measuredAtMs > 0 && (lastFs > 0 || lastHrBpm > 0 || lastHrvMs > 0);
+        return measurementValid
+                && measuredAtMs > 0
+                && lastHrBpm >= 40 && lastHrBpm <= 180
+                && lastHrvMs > 0;
+    }
+
+    /** 새 측정 시작·실패 시 이전 결과를 결과 화면/업로드에 쓰지 못하게 한다. */
+    public static void clearCurrent(Context ctx) {
+        lastSpike = null;
+        lastRawSignal = null;
+        lastFs = 0;
+        lastHrBpm = 0;
+        lastHrvMs = 0;
+        lastRrMs = 0;
+        lastStressScore = 0;
+        measuredAtMs = 0L;
+        measurementValid = false;
+        if (ctx != null) {
+            ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .remove(KEY_LAST)
+                    .apply();
+        }
     }
 
     /** 서버 업로드용 원시 신호 (5분·250Hz 전체). prefs 에는 저장하지 않음. */
@@ -94,6 +118,7 @@ public class LastEcgResult {
                 lastRrMs = 0;
                 lastStressScore = 0;
                 measuredAtMs = 0L;
+                measurementValid = false;
             }
             return;
         }
@@ -106,6 +131,8 @@ public class LastEcgResult {
             lastRrMs = o.optInt("rrMs", 0);
             lastStressScore = o.optInt("stress", 0);
             measuredAtMs = o.optLong("timeMs", 0L);
+            measurementValid = o.optBoolean("valid",
+                    lastHrBpm >= 40 && lastHrBpm <= 180 && lastHrvMs > 0);
 
             if (o.has("spike")) {
                 JSONArray arr = o.getJSONArray("spike");
@@ -127,6 +154,7 @@ public class LastEcgResult {
                 lastRrMs = 0;
                 lastStressScore = 0;
                 measuredAtMs = 0L;
+                measurementValid = false;
             }
         }
     }
@@ -147,6 +175,7 @@ public class LastEcgResult {
         lastRrMs = rrMs != null ? rrMs : 0;       // RR 간격(ms)
         lastStressScore = stressScore;
         measuredAtMs = timeMs;
+        measurementValid = lastHrBpm >= 40 && lastHrBpm <= 180 && lastHrvMs > 0;
 
         if (spike != null && spike.length > 0) {
             lastSpike = new float[spike.length];
@@ -166,6 +195,7 @@ public class LastEcgResult {
             last.put("rrMs", lastRrMs);
             last.put("stress", lastStressScore);
             last.put("timeMs", measuredAtMs);
+            last.put("valid", measurementValid);
 
             if (lastSpike != null) {
                 JSONArray arr = new JSONArray();

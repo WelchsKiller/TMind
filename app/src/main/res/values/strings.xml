@@ -30,6 +30,10 @@
     <!-- Dashboard -->
     <string name="dashboard_title">오늘의 기록</string>
     <string name="dashboard_greeting">오늘도 함께해요</string>
+    <string name="dashboard_greeting_am_start">오전 미션을 시작해 주세요.</string>
+    <string name="dashboard_greeting_pm_start">오후 미션을 시작해 주세요.</string>
+    <string name="dashboard_greeting_am_missed">오전 미션을 놓치셨어요. 오후 미션을 시작해 주세요.</string>
+    <string name="dashboard_greeting_am_pm_done">오전·오후 미션을 모두 완료했어요!</string>
     <string name="logout">로그아웃</string>
     <string name="logout_confirm">로그아웃할까요?\n다시 참여하려면 번호를 입력해 주세요.</string>
     <string name="dashboard_greeting_named">%1$s 님, 오늘도 함께해요</string>
@@ -48,7 +52,7 @@
     <string name="session_followup">종료</string>
     <string name="session_today">오늘</string>
     <string name="session_event">추가</string>
-    <string name="star_hint">오전·오후 미션을 각각 완료하면 별이 반 개씩 채워집니다.\n오전·오후를 모두 완료하면 별이 가득 차요.\n한쪽만 완료하고 추가 측정을 하면 반 별에 특별한 효과가 더해집니다.</string>
+    <string name="star_hint">오전 미션만 완료하면 별의 왼쪽이 채워집니다.\n오후 미션만 완료하면 별의 오른쪽이 채워집니다.\n오전·오후를 모두 완료하면 별이 가득 차요.\n추가 측정을 하면 특별한 효과가 더해집니다.</string>
     <string name="new_participant">다른 참여자로 시작</string>
     <string name="new_participant_confirm">현재 참여자 정보를 지우고\n새 참여자를 등록할까요?</string>
     <string name="additional_measure_title">추가 측정</string>
