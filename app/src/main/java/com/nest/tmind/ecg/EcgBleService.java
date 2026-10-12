@@ -77,6 +77,9 @@ public class EcgBleService extends Service {
     public interface ConnectionListener {
         void onBleConnectionChanged(boolean ready);
         void onBleConnectionFailed();
+
+        default void onBleProgress(String message) {
+        }
     }
 
     private final IBinder binder = new EcgBinder();
@@ -123,6 +126,20 @@ public class EcgBleService extends Service {
         }
     }
 
+    private void dispatchProgress(String message) {
+        dispatchProgress(message, false);
+    }
+
+    private void dispatchProgress(String message, boolean showToast) {
+        Log.i("BLEBLE", message);
+        if (showToast) toast(message);
+        synchronized (connectionListeners) {
+            for (ConnectionListener l : connectionListeners) {
+                l.onBleProgress(message);
+            }
+        }
+    }
+
     /**
      * 측정 화면 진입 시: 저장된 기기 삭제 → 기존 연결 해제 → 새 스캔 (최대 3회)
      */
@@ -138,6 +155,9 @@ public class EcgBleService extends Service {
         clearSavedDevice();
         scanAttempt = 0;
         best = null;
+        connectStyle = 0;
+        connectingDevice = null;
+        resetLiveProof();
         EcgConfig.isBleReady = false;
         BLE_Stat = false;
         dispatchConnectionChanged(false);
@@ -254,6 +274,12 @@ public class EcgBleService extends Service {
     // ===== 스캔/연결 설정 =====
     private static final String[] NAME_KEYWORDS = new String[]{"EKG", "NS_EKG", "NEST", "EKG_"};
     private static final int SCAN_TIMEOUT_MS = 8000;
+    /** connectGatt 이후 콜백이 없으면 태블릿에서 무한 대기가 된다. */
+    private static final long CONNECT_WATCHDOG_MS = 12000L;
+    private static final long DISCOVER_WATCHDOG_MS = 8000L;
+    private static final long CCCD_WATCHDOG_MS = 5000L;
+    private static final long MTU_WATCHDOG_MS = 4000L;
+    private static final long LIVE_PROOF_MS = 5000L;
 
     // ===== UUID =====
     private static final UUID UUID_SERVICE = BleManager.UUID_SERVICE;
@@ -269,6 +295,18 @@ public class EcgBleService extends Service {
     private boolean isConnecting = false;
     private ScanResult best;
     private Runnable scanTimeout;
+    private Runnable connectWatchdog;
+    private Runnable discoverWatchdog;
+    private Runnable cccdWatchdog;
+    private Runnable mtuWatchdog;
+    private Runnable liveProofWatchdog;
+    private boolean awaitingLiveProof;
+    private boolean liveRssiOk;
+    private boolean liveNotifyOk;
+    private boolean liveWriteOk;
+    private BluetoothDevice connectingDevice;
+    /** 0=Android 13용 PHY, 1=TRANSPORT만, 2=기본 connectGatt */
+    private int connectStyle = 0;
     private BluetoothGattCharacteristic chWrite, chNotify;
 
     // ===== 프레임 파싱 =====
@@ -529,7 +567,7 @@ public class EcgBleService extends Service {
     private void startScan() {
         if (scanner == null || scanning) return;
         scanning = true;
-        toast("기기 스캔을 시작합니다 (" + (scanAttempt + 1) + "/" + MAX_SCAN_ATTEMPTS + ")");
+        dispatchProgress("기기 스캔을 시작합니다 (" + (scanAttempt + 1) + "/" + MAX_SCAN_ATTEMPTS + ")");
 
         try {
             ScanSettings.Builder sb = new ScanSettings.Builder()
@@ -564,7 +602,7 @@ public class EcgBleService extends Service {
                         }
                     }, 500);
                 } else {
-                    toast("기기를 찾지 못했습니다 (" + MAX_SCAN_ATTEMPTS + "회 시도)");
+                    dispatchProgress("기기를 찾지 못했습니다 (" + MAX_SCAN_ATTEMPTS + "회 시도)");
                     if (freshMeasureMode) {
                         freshMeasureMode = false;
                         dispatchConnectionFailed();
@@ -613,44 +651,227 @@ public class EcgBleService extends Service {
 
     @SuppressLint("MissingPermission")
     private void connect(BluetoothDevice d) {
-        if (isConnecting || d == null) return;
+        if (d == null) return;
         if (!autoConnectEnabled && !freshMeasureMode) return;
+        if (isConnecting && gatt != null) return;
 
-        // 새로 연결 시도 → 아직 준비 안됨
         EcgConfig.isBleReady = false;
-
+        connectingDevice = d;
         isConnecting = true;
-        toast("연결 중… " + (d.getName() != null ? d.getName() : d.getAddress()));
+        String name = d.getName() != null ? d.getName() : d.getAddress();
+        dispatchProgress("연결 중… " + name + " (방식 " + (connectStyle + 1) + "/3)");
         try {
-            // 🔹 마지막으로 연결한 기기 주소 저장
             lastDeviceAddress = d.getAddress();
             getSharedPreferences("ecg_ble", MODE_PRIVATE)
                     .edit()
                     .putString("last_device", lastDeviceAddress)
                     .apply();
 
-            if (needsSlowGatt() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // 콜백을 메인 스레드로 고정하고, 1M PHY로만 붙는다.
-                // Android 13 태블릿은 스캔 직후 2M 협상에서 status 133이 난다.
-                gatt = d.connectGatt(
-                        this,
-                        false,
-                        gattCb,
-                        BluetoothDevice.TRANSPORT_LE,
-                        BluetoothDevice.PHY_LE_1M,
-                        h
-                );
-            } else {
-                gatt = d.connectGatt(
-                        this,
-                        false,
-                        gattCb,
-                        BluetoothDevice.TRANSPORT_LE
-                );
+            gatt = connectGattWithStyle(d, connectStyle);
+            if (gatt == null) {
+                isConnecting = false;
+                dispatchProgress("연결 객체 생성 실패(status=-1)");
+                retryConnectOrScan();
+                return;
             }
+            scheduleConnectWatchdog();
         } catch (SecurityException e) {
             isConnecting = false;
-            toast("연결 권한 필요");
+            dispatchProgress("연결 권한 필요");
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private BluetoothGatt connectGattWithStyle(BluetoothDevice d, int style) {
+        if (style == 0 && needsSlowGatt() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return d.connectGatt(this, false, gattCb,
+                    BluetoothDevice.TRANSPORT_LE, BluetoothDevice.PHY_LE_1M, h);
+        }
+        if (style <= 1) {
+            return d.connectGatt(this, false, gattCb, BluetoothDevice.TRANSPORT_LE);
+        }
+        return d.connectGatt(this, false, gattCb);
+    }
+
+    private void scheduleConnectWatchdog() {
+        cancelConnectWatchdog();
+        connectWatchdog = () -> {
+            connectWatchdog = null;
+            if (EcgConfig.isBleReady) return;
+            dispatchProgress("연결 시간 초과. 다른 방식으로 다시 시도합니다.");
+            closeGatt();
+            retryConnectOrScan();
+        };
+        h.postDelayed(connectWatchdog, CONNECT_WATCHDOG_MS);
+    }
+
+    private void cancelConnectWatchdog() {
+        if (connectWatchdog != null) {
+            h.removeCallbacks(connectWatchdog);
+            connectWatchdog = null;
+        }
+    }
+
+    private void scheduleDiscoverWatchdog(BluetoothGatt g) {
+        cancelDiscoverWatchdog();
+        discoverWatchdog = () -> {
+            discoverWatchdog = null;
+            if (EcgConfig.isBleReady) return;
+            dispatchProgress("서비스 검색 시간 초과. 다시 검색합니다.");
+            try {
+                g.discoverServices();
+            } catch (Exception ignore) {
+            }
+            h.postDelayed(() -> {
+                if (!EcgConfig.isBleReady) {
+                    dispatchProgress("서비스 검색 실패(status=-2)");
+                    closeGatt();
+                    retryConnectOrScan();
+                }
+            }, DISCOVER_WATCHDOG_MS);
+        };
+        h.postDelayed(discoverWatchdog, DISCOVER_WATCHDOG_MS);
+    }
+
+    private void cancelDiscoverWatchdog() {
+        if (discoverWatchdog != null) {
+            h.removeCallbacks(discoverWatchdog);
+            discoverWatchdog = null;
+        }
+    }
+
+    private void scheduleCccdWatchdog() {
+        cancelCccdWatchdog();
+        cccdWatchdog = () -> {
+            cccdWatchdog = null;
+            if (EcgConfig.isBleReady) return;
+            dispatchProgress("알림 설정 시간 초과. 다시 연결합니다.", true);
+            closeGatt();
+            retryConnectOrScan();
+        };
+        h.postDelayed(cccdWatchdog, CCCD_WATCHDOG_MS);
+    }
+
+    private void resetLiveProof() {
+        awaitingLiveProof = false;
+        liveRssiOk = false;
+        liveNotifyOk = false;
+        liveWriteOk = false;
+        cancelMtuWatchdog();
+        cancelLiveProofWatchdog();
+    }
+
+    private void scheduleMtuWatchdog(BluetoothGatt g) {
+        cancelMtuWatchdog();
+        mtuWatchdog = () -> {
+            mtuWatchdog = null;
+            if (EcgConfig.isBleReady) return;
+            dispatchProgress("기기 응답이 없습니다. 전원과 거리를 확인해 주세요.", true);
+            closeGatt();
+            retryAfterLiveProofFail();
+        };
+        h.postDelayed(mtuWatchdog, MTU_WATCHDOG_MS);
+    }
+
+    private void cancelMtuWatchdog() {
+        if (mtuWatchdog != null) {
+            h.removeCallbacks(mtuWatchdog);
+            mtuWatchdog = null;
+        }
+    }
+
+    private void scheduleLiveProofWatchdog() {
+        cancelLiveProofWatchdog();
+        liveProofWatchdog = () -> {
+            liveProofWatchdog = null;
+            if (EcgConfig.isBleReady) return;
+            if (liveRssiOk || liveNotifyOk || liveWriteOk) {
+                afterNotifyReady();
+                return;
+            }
+            dispatchProgress("실제 기기 응답이 없습니다. 전원을 확인하고 다시 시도합니다.", true);
+            closeGatt();
+            retryAfterLiveProofFail();
+        };
+        h.postDelayed(liveProofWatchdog, LIVE_PROOF_MS);
+    }
+
+    private void cancelLiveProofWatchdog() {
+        if (liveProofWatchdog != null) {
+            h.removeCallbacks(liveProofWatchdog);
+            liveProofWatchdog = null;
+        }
+    }
+
+    /** 캐시 연결이 반복되지 않게, 살아 있는지 확인 실패 시에는 다시 스캔한다. */
+    private void retryAfterLiveProofFail() {
+        connectStyle = 0;
+        if (!autoConnectEnabled && !freshMeasureMode) return;
+        if (freshMeasureMode) scanAttempt++;
+        if (scanAttempt < MAX_SCAN_ATTEMPTS) {
+            h.postDelayed(this::startAutoConnect, 1000);
+        } else {
+            freshMeasureMode = false;
+            dispatchConnectionFailed();
+        }
+    }
+
+    private void tryCompleteLiveProof() {
+        if (!awaitingLiveProof || EcgConfig.isBleReady) return;
+        if (liveRssiOk || liveNotifyOk || liveWriteOk) {
+            afterNotifyReady();
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void startServiceDiscovery(BluetoothGatt g) {
+        if (g == null) return;
+        dispatchProgress("서비스 검색 중");
+        try {
+            g.discoverServices();
+            scheduleDiscoverWatchdog(g);
+        } catch (Exception ignore) {
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void beginLiveProof(BluetoothGatt g) {
+        awaitingLiveProof = true;
+        liveRssiOk = false;
+        liveNotifyOk = false;
+        liveWriteOk = false;
+        dispatchProgress("기기 응답 확인 중");
+        try {
+            g.readRemoteRssi();
+        } catch (Exception ignore) {
+        }
+        h.post(() -> writeAscii("@Ark\r\n", true));
+        scheduleLiveProofWatchdog();
+    }
+
+    private void cancelCccdWatchdog() {
+        if (cccdWatchdog != null) {
+            h.removeCallbacks(cccdWatchdog);
+            cccdWatchdog = null;
+        }
+    }
+
+    private void retryConnectOrScan() {
+        if (!autoConnectEnabled && !freshMeasureMode) return;
+        BluetoothDevice device = connectingDevice;
+        if (device != null && connectStyle < 2) {
+            connectStyle++;
+            h.postDelayed(() -> connect(device), 800);
+            return;
+        }
+        connectStyle = 0;
+        connectingDevice = null;
+        if (freshMeasureMode) scanAttempt++;
+        if (scanAttempt < MAX_SCAN_ATTEMPTS) {
+            h.postDelayed(this::startAutoConnect, 800);
+        } else {
+            freshMeasureMode = false;
+            dispatchConnectionFailed();
         }
     }
 
@@ -663,48 +884,36 @@ public class EcgBleService extends Service {
                 MetricsManager.getInstance().onBleConnected();
 
                 isConnecting = false;
-                // Android 13 이하는 링크가 안정되기 전 priority 요청이 133을 유발한다.
+                cancelConnectWatchdog();
+                dispatchProgress("연결됨(status=" + status + "), 기기 응답 확인 중");
                 if (!needsSlowGatt()) {
                     try {
                         g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
                     } catch (Exception ignore) {
                     }
                 }
-                final long discoverDelayMs = needsSlowGatt() ? 1500 : 600;
-                h.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            if (needsSlowGatt()) {
-                                refreshCache(g);
-                            }
-                            g.discoverServices();
-                        } catch (Exception ignore) {
+                final long mtuDelayMs = needsSlowGatt() ? 800 : 300;
+                h.postDelayed(() -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            g.requestMtu(185);
+                            scheduleMtuWatchdog(g);
+                        } else {
+                            startServiceDiscovery(g);
                         }
+                    } catch (Exception e) {
+                        startServiceDiscovery(g);
                     }
-                }, discoverDelayMs);
+                }, mtuDelayMs);
                 return;
             }
             // Samsung 등에서 흔한 GATT_ERROR(133) → 재연결
             if (status == 133 || status == 8 || status == 22) {
                 isConnecting = false;
                 EcgConfig.isBleReady = false;
+                dispatchProgress("연결 재시도(status=" + status + ")", true);
                 closeGatt();
-                if (freshMeasureMode) scanAttempt++;
-                toast("연결 재시도(status=" + status + ")");
-                final long retryDelayMs = needsSlowGatt() ? 1800 : 1000;
-                h.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (!autoConnectEnabled && !freshMeasureMode) return;
-                        if (scanAttempt < MAX_SCAN_ATTEMPTS) {
-                            startAutoConnect();
-                        } else {
-                            freshMeasureMode = false;
-                            dispatchConnectionFailed();
-                        }
-                    }
-                }, retryDelayMs);
+                retryConnectOrScan();
                 return;
             }
             if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -712,78 +921,55 @@ public class EcgBleService extends Service {
 
                 isConnecting = false;
                 EcgConfig.isBleReady = false;   // 🔴 연결 끊김 → 준비 아님
-
-                h.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        toast("연결 해제(status=" + status + ")");
-                    }
-                });
+                dispatchProgress("연결 해제(status=" + status + ")", true);
                 closeGatt();
                 h.postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         if (!autoConnectEnabled) return;
-                        if (freshMeasureMode && scanAttempt >= MAX_SCAN_ATTEMPTS) {
-                            freshMeasureMode = false;
-                            dispatchConnectionFailed();
-                            return;
-                        }
-                        startAutoConnect();
+                        retryConnectOrScan();
                     }
                 }, 800);
+                return;
             }
+            dispatchProgress("연결 상태 변경(status=" + status + ", state=" + newState + ")");
         }
 
         @SuppressLint("MissingPermission")
         @Override
         public void onServicesDiscovered(BluetoothGatt g, int status) {
+            cancelDiscoverWatchdog();
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 EcgConfig.isBleReady = false;
-                h.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        toast("서비스 검색 실패");
-                    }
-                });
+                dispatchProgress("서비스 검색 실패(status=" + status + ")");
+                closeGatt();
+                retryConnectOrScan();
                 return;
             }
             BluetoothGattService svc = g.getService(UUID_SERVICE);
             if (svc == null) {
                 EcgConfig.isBleReady = false;
-                h.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        toast("서비스 없음");
-                    }
-                });
+                dispatchProgress("서비스 없음(status=" + status + ")");
+                closeGatt();
+                retryConnectOrScan();
                 return;
             }
             chNotify = svc.getCharacteristic(UUID_CHAR_NOTIFY);
             chWrite = svc.getCharacteristic(UUID_CHAR_WRITE);
             if (chNotify == null || chWrite == null) {
                 EcgConfig.isBleReady = false;
-                h.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        toast("캐릭터리스틱 누락");
-                    }
-                });
+                dispatchProgress("캐릭터리스틱 누락(status=" + status + ")");
+                closeGatt();
+                retryConnectOrScan();
                 return;
             }
 
+            dispatchProgress("서비스 검색 완료(status=" + status + ")");
             if (needsSlowGatt()) {
                 try {
                     g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
                 } catch (Exception ignore) {
                 }
-            }
-            try {
-                // A50 등 구형 기기: MTU 요청 실패해도 측정 계속
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    g.requestMtu(185);
-                }
-            } catch (Exception ignore) {
             }
             g.setCharacteristicNotification(chNotify, true);
             BluetoothGattDescriptor cccd = chNotify.getDescriptor(UUID_CCCD);
@@ -794,20 +980,62 @@ public class EcgBleService extends Service {
                         : BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
                 try {
                     g.writeDescriptor(cccd);
+                    scheduleCccdWatchdog();
                 } catch (Exception e) {
+                    dispatchProgress("알림 설정 실패, 재검색");
                     refreshCache(g);
                     h.postDelayed(new Runnable() {
                         @Override
                         public void run() {
                             try {
                                 g.discoverServices();
+                                scheduleDiscoverWatchdog(g);
                             } catch (Exception ignore) {
                             }
                         }
                     }, 350);
                 }
             } else {
-                afterNotifyReady();
+                beginLiveProof(g);
+            }
+        }
+
+        @Override
+        public void onMtuChanged(BluetoothGatt g, int mtu, int status) {
+            cancelMtuWatchdog();
+            dispatchProgress("기기 응답 확인(MTU=" + mtu + ", status=" + status + ")");
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                dispatchProgress("기기 응답 실패(status=" + status + "). 다시 연결합니다.", true);
+                closeGatt();
+                retryAfterLiveProofFail();
+                return;
+            }
+            startServiceDiscovery(g);
+        }
+
+        @Override
+        public void onCharacteristicWrite(BluetoothGatt g, BluetoothGattCharacteristic ch, int status) {
+            if (!awaitingLiveProof || chWrite == null || ch == null) return;
+            if (!ch.getUuid().equals(chWrite.getUuid())) return;
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                liveWriteOk = true;
+                dispatchProgress("기기 쓰기 확인(status=" + status + ")");
+                tryCompleteLiveProof();
+            } else {
+                dispatchProgress("기기 쓰기 실패(status=" + status + ")");
+            }
+        }
+
+        @Override
+        public void onReadRemoteRssi(BluetoothGatt g, int rssi, int status) {
+            boolean usable = status == BluetoothGatt.GATT_SUCCESS && rssi != 127 && rssi > -100 && rssi < 0;
+            Log.i("BLEBLE", "RSSI=" + rssi + " status=" + status + " usable=" + usable);
+            if (usable) {
+                liveRssiOk = true;
+                dispatchProgress("신호 확인(RSSI=" + rssi + ")");
+                tryCompleteLiveProof();
+            } else if (awaitingLiveProof) {
+                dispatchProgress("신호 없음(RSSI=" + rssi + ", status=" + status + ")");
             }
         }
 
@@ -815,9 +1043,10 @@ public class EcgBleService extends Service {
         @Override
         public void onDescriptorWrite(BluetoothGatt g, BluetoothGattDescriptor d, int status) {
             if (!UUID_CCCD.equals(d.getUuid())) return;
+            cancelCccdWatchdog();
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                EcgConfig.isBleReady = true;
-                afterNotifyReady();
+                dispatchProgress("알림 설정 완료(status=" + status + ")");
+                beginLiveProof(g);
             } else {
                 EcgConfig.isBleReady = false;
                 if (status == BluetoothGatt.GATT_INSUFFICIENT_AUTHENTICATION ||
@@ -849,49 +1078,49 @@ public class EcgBleService extends Service {
 
         @Override
         public void onCharacteristicChanged(BluetoothGatt g, BluetoothGattCharacteristic ch) {
-
-            Log.d("BLEBLE", "onCharacteristicChanged() measuring=" + measuring);
-
-            // ✅ 측정 중일 때만 데이터 처리
-            if (!measuring) return;
-
             byte[] b = ch.getValue();
             if (b == null || b.length == 0) return;
+            if (awaitingLiveProof) {
+                liveNotifyOk = true;
+                h.post(() -> tryCompleteLiveProof());
+            }
+            if (!measuring) return;
             onAsciiBytes(b);
         }
     };
 
     private void afterNotifyReady() {
+        if (EcgConfig.isBleReady) return;
+        cancelConnectWatchdog();
+        cancelDiscoverWatchdog();
+        cancelCccdWatchdog();
+        cancelMtuWatchdog();
+        cancelLiveProofWatchdog();
+        awaitingLiveProof = false;
         BLE_Stat = true;
         EcgConfig.isBleReady = true;
-
-        h.post(new Runnable() {
-            @Override
-            public void run() {
-                writeAscii("@Ark\r\n");
-                h.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        writeAscii("@F0\r\n");
-                    }
-                }, 120);
-            }
-        });
-
+        connectStyle = 0;
         measuring = false;
         dispatchConnectionChanged(true);
         freshMeasureMode = false;
         scanAttempt = 0;
-        toast("기기 연결이 완료되었습니다.");
+        dispatchProgress("기기 연결이 완료되었습니다.", true);
     }
 
 
     @SuppressLint("MissingPermission")
     private void writeAscii(String s) {
+        writeAscii(s, false);
+    }
+
+    @SuppressLint("MissingPermission")
+    private void writeAscii(String s, boolean needResponse) {
         if (gatt == null || chWrite == null) return;
         try {
             chWrite.setValue(s.getBytes(StandardCharsets.US_ASCII));
-            chWrite.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+            chWrite.setWriteType(needResponse
+                    ? BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    : BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
             gatt.writeCharacteristic(chWrite);
         } catch (Exception ignore) {
         }
@@ -1223,6 +1452,13 @@ public class EcgBleService extends Service {
     @SuppressLint("MissingPermission")
     private void closeGatt() {
         cancelPendingConnect();
+        cancelConnectWatchdog();
+        cancelDiscoverWatchdog();
+        cancelCccdWatchdog();
+        cancelMtuWatchdog();
+        cancelLiveProofWatchdog();
+        resetLiveProof();
+        isConnecting = false;
         if (gatt != null) {
             try {
                 gatt.disconnect();

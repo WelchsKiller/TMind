@@ -413,10 +413,17 @@ public class HrvMeasureActivity extends BaseSeniorActivity
     public void onBleConnectionChanged(boolean ready) {
         runOnUiThread(() -> {
             if (ready) {
+                tvTimerLabel.setText(R.string.connecting_device);
                 beginMeasurementIfNeeded();
-            } else if (!measurementStarted) {
-                showConnectingUi();
             }
+        });
+    }
+
+    @Override
+    public void onBleProgress(String message) {
+        runOnUiThread(() -> {
+            if (measurementStarted || message == null || message.isEmpty()) return;
+            tvTimerLabel.setText(message);
         });
     }
 
