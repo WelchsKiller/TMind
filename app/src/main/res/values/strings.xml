@@ -55,6 +55,9 @@
     <string name="star_hint">오전 미션만 완료하면 별의 왼쪽이 채워집니다.\n오후 미션만 완료하면 별의 오른쪽이 채워집니다.\n오전·오후를 모두 완료하면 별이 가득 차요.\n추가 측정을 하면 특별한 효과가 더해집니다.</string>
     <string name="new_participant">다른 참여자로 시작</string>
     <string name="new_participant_confirm">현재 참여자 정보를 지우고\n새 참여자를 등록할까요?</string>
+    <string name="feedback_resume_title">마음 결과 확인</string>
+    <string name="feedback_resume_sub">예측 결과를 확인하고 맞춰 주세요</string>
+    <string name="dashboard_greeting_feedback">마음 결과를 확인하고 맞춰 주세요.</string>
     <string name="additional_measure_title">추가 측정</string>
     <string name="additional_measure_sub">심박변이도·마음상태·마음일기를 추가로 진행할 수 있어요.</string>
     <string name="additional_measure_sub_count">추가 측정 %1$d/%2$d회 · 심박변이도 → 마음상태 → 마음일기</string>

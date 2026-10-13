@@ -65,6 +65,15 @@ public final class ApiModels {
         public Boolean hrvDone;
         public Boolean emaDone;
         public Boolean diaryDone;
+        public Boolean predictionDone;
+        public Boolean feedbackDone;
+        /** 예측 저장 전에는 null. */
+        public Float predictedValence;
+        public Float predictedArousal;
+
+        public boolean needsFeedback() {
+            return ApiModels.needsFeedback(predictionDone, feedbackDone);
+        }
     }
 
     public static final class TodayResponse {
@@ -81,6 +90,13 @@ public final class ApiModels {
         public Boolean hrvDone;
         public Boolean emaDone;
         public Boolean diaryDone;
+        /** 예측 결과가 저장되었으면 true. */
+        public Boolean predictionDone;
+        /** 피드백이 저장되었으면 true. */
+        public Boolean feedbackDone;
+        /** 예측 저장 전에는 null. 재진입 시 사분면에 띄운다. */
+        public Float predictedValence;
+        public Float predictedArousal;
         /** VALID / INVALID. 수행 전이면 null. INVALID 여도 그날 재측정 가능. */
         public String hrvStatus;
         public int totalCount;
@@ -104,6 +120,15 @@ public final class ApiModels {
         public List<Integer> stars;
         /** 서버가 세션 판정에 사용한 오늘 날짜 yyyy-MM-dd */
         public String serverDate;
+
+        public boolean needsFeedback() {
+            return ApiModels.needsFeedback(predictionDone, feedbackDone);
+        }
+    }
+
+    /** 예측이 저장되고 피드백만 남은 상태. */
+    public static boolean needsFeedback(Boolean predictionDone, Boolean feedbackDone) {
+        return Boolean.TRUE.equals(predictionDone) && !Boolean.TRUE.equals(feedbackDone);
     }
 
     public static final class ParticipationResponse {

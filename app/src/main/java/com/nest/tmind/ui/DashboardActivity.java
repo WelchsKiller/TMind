@@ -27,7 +27,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     private MissionManager mission;
     private SessionManager session;
 
-    private View cardHrv, cardEma, cardDiary, cardAdditional;
+    private View cardHrv, cardEma, cardDiary, cardFeedback, cardAdditional;
     private TextView tvGreeting, tvProgress, tvAdditionalSub;
     private LinearLayout starRow;
     private ProgressBar progressBar;
@@ -57,6 +57,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardHrv = findViewById(R.id.cardHrv);
         cardEma = findViewById(R.id.cardEma);
         cardDiary = findViewById(R.id.cardDiary);
+        cardFeedback = findViewById(R.id.cardFeedback);
         cardAdditional = findViewById(R.id.cardAdditional);
         tvAdditionalSub = findViewById(R.id.tvAdditionalSub);
         progressBar = findViewById(R.id.progressBar);
@@ -66,6 +67,8 @@ public class DashboardActivity extends BaseSeniorActivity {
         setupMissionCard(cardHrv, R.drawable.ic_heart, R.string.mission_hrv, R.string.mission_hrv_sub);
         setupMissionCard(cardEma, R.drawable.ic_survey, R.string.mission_ema, R.string.mission_ema_sub);
         setupMissionCard(cardDiary, R.drawable.ic_diary, R.string.mission_diary, R.string.mission_diary_active);
+        setupMissionCard(cardFeedback, R.drawable.ic_survey, R.string.feedback_resume_title,
+                R.string.feedback_resume_sub);
 
         tvGreeting.setText(R.string.dashboard_greeting);
         setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvGreeting, R.id.tvProgress);
@@ -74,6 +77,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardHrv.setOnClickListener(v -> onHrvClick());
         cardEma.setOnClickListener(v -> onEmaClick());
         cardDiary.setOnClickListener(v -> onDiaryClick());
+        cardFeedback.setOnClickListener(v -> onFeedbackClick());
         cardAdditional.setOnClickListener(v -> openAdditional());
         btnWeeklyTrend.setOnClickListener(v ->
                 startActivity(new Intent(this, WeeklyTrendActivity.class)));
@@ -198,6 +202,11 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void startEventSession() {
+        if (needsEventFeedback()) {
+            mission.setAdditionalMeasureMode(true);
+            openFeedbackReentry(true);
+            return;
+        }
         mission.setAdditionalMeasureMode(true);
         MemberApiManager.ResultCallback<Long> afterEvent =
                 new MemberApiManager.ResultCallback<Long>() {
@@ -214,8 +223,10 @@ public class DashboardActivity extends BaseSeniorActivity {
                         });
                     }
                 };
-        // 진행 중인 Event 가 없으면 예측이 끝난 정규 세션 ID 를 재사용하지 않고 새로 연다.
-        if (mission.hasEventInProgress()) {
+        // 피드백만 남았거나 미션이 이어지면 기존 Event 를 쓰고, 아니면 새로 연다.
+        long eventId = session.getCurrentSessionId(true);
+        if (needsEventFeedback() || mission.hasEventInProgress()
+                || (eventId > 0 && !session.isFeedbackDone(eventId))) {
             MemberApiManager.ensureSessionStarted(this, true, afterEvent);
         } else {
             MemberApiManager.startFreshEventSession(this, afterEvent);
@@ -223,8 +234,37 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private void proceedAdditionalMeasure() {
-        // 추가 측정도 심박 → 설문 → 일기 순서.
+        if (needsEventFeedback()) {
+            openFeedbackReentry(true);
+            return;
+        }
         MissionManager.Session event = MissionManager.Session.EVENT;
+        if (mission.isSessionAllDone(event) && session.getCurrentSessionId(true) > 0
+                && !session.isFeedbackDone(session.getCurrentSessionId(true))) {
+            MemberApiManager.resyncEventSession(this, new MemberApiManager.ResultCallback<Long>() {
+                @Override
+                public void onSuccess(Long data) {
+                    runOnUiThread(() -> {
+                        if (needsEventFeedback()) {
+                            openFeedbackReentry(true);
+                        } else {
+                            mission.clearEventMissions();
+                            openHrv();
+                        }
+                    });
+                }
+
+                @Override
+                public void onError(String message) {
+                    runOnUiThread(() -> {
+                        mission.clearEventMissions();
+                        openHrv();
+                    });
+                }
+            });
+            return;
+        }
+        // 추가 측정도 심박 → 설문 → 일기 순서.
         if (!mission.isHrvDone(event)) {
             openHrv();
         } else if (!mission.isEmaDone(event)) {
@@ -235,6 +275,26 @@ public class DashboardActivity extends BaseSeniorActivity {
             mission.clearEventMissions();
             openHrv();
         }
+    }
+
+    private void onFeedbackClick() {
+        if (!needsFeedbackButton()) return;
+        boolean additional = !needsTodayFeedback() || isTodayEventSession();
+        mission.setAdditionalMeasureMode(additional);
+        openFeedbackReentry(additional);
+    }
+
+    private void openFeedbackReentry(boolean additional) {
+        Intent i = new Intent(this, AnalysisResultActivity.class);
+        i.putExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, additional);
+        i.putExtra(AnalysisResultActivity.EXTRA_REENTRY, true);
+        Float valence = predictedValence(additional);
+        Float arousal = predictedArousal(additional);
+        if (valence != null && arousal != null) {
+            i.putExtra(AnalysisResultActivity.EXTRA_PREDICTED_VALENCE, valence);
+            i.putExtra(AnalysisResultActivity.EXTRA_PREDICTED_AROUSAL, arousal);
+        }
+        startActivity(i);
     }
 
     private void onHrvClick() {
@@ -345,6 +405,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         applyCardState(cardHrv, isHrvValid(), R.drawable.bg_mission_card_active);
         applyCardState(cardEma, isEmaDone(), R.drawable.bg_mission_card_ema);
         applyCardState(cardDiary, isDiaryDone(), R.drawable.bg_mission_card_diary);
+        refreshFeedbackCard();
 
         TextView hrvSub = cardHrv.findViewById(R.id.tvMissionSub);
         if (isHrvInvalid() && !isPredictionLocked()) {
@@ -362,6 +423,16 @@ public class DashboardActivity extends BaseSeniorActivity {
         updateGreeting();
         refreshAdditionalCard();
         renderStars();
+    }
+
+    private void refreshFeedbackCard() {
+        boolean show = needsFeedbackButton();
+        cardFeedback.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) {
+            applyCardState(cardFeedback, false, R.drawable.bg_mission_card_ema);
+            ((TextView) cardFeedback.findViewById(R.id.tvMissionSub))
+                    .setText(R.string.feedback_resume_sub);
+        }
     }
 
     private void refreshAdditionalCard() {
@@ -401,6 +472,7 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     /** 결과(예측) 화면이 나온 뒤에는 이 세션의 심박을 다시 잴 수 없다. */
     private boolean isPredictionLocked() {
+        if (today != null && Boolean.TRUE.equals(today.predictionDone)) return true;
         long sid = 0L;
         if (today != null && today.currentSessionId != null) {
             sid = today.currentSessionId;
@@ -408,6 +480,62 @@ public class DashboardActivity extends BaseSeniorActivity {
         if (sid <= 0) sid = session.getCurrentSessionId(false);
         if (sid > 0) return session.isPredictionSaved(sid);
         return isTodayAllDone();
+    }
+
+    private boolean needsTodayFeedback() {
+        return today != null && today.needsFeedback();
+    }
+
+    private boolean needsEventFeedback() {
+        long eventId = session.getCurrentSessionId(true);
+        if (eventId > 0 && session.needsFeedback(eventId)) return true;
+        ApiModels.StartSessionData started = MemberApiManager.lastStartSession();
+        return eventId > 0 && started != null
+                && started.sessionId == eventId && started.needsFeedback();
+    }
+
+    private boolean needsFeedbackButton() {
+        return needsTodayFeedback() || needsEventFeedback();
+    }
+
+    private boolean isTodayEventSession() {
+        if (today == null || today.currentSessionId == null) return false;
+        long sid = today.currentSessionId;
+        long eventId = session.getCurrentSessionId(true);
+        long mainId = session.getCurrentSessionId(false);
+        return sid > 0 && sid == eventId && sid != mainId;
+    }
+
+    private Float predictedValence(boolean additional) {
+        if (!additional && today != null && today.predictedValence != null) {
+            return today.predictedValence;
+        }
+        if (additional) {
+            if (today != null && isTodayEventSession() && today.predictedValence != null) {
+                return today.predictedValence;
+            }
+            ApiModels.StartSessionData started = MemberApiManager.lastStartSession();
+            if (started != null && started.predictedValence != null) {
+                return started.predictedValence;
+            }
+        }
+        return null;
+    }
+
+    private Float predictedArousal(boolean additional) {
+        if (!additional && today != null && today.predictedArousal != null) {
+            return today.predictedArousal;
+        }
+        if (additional) {
+            if (today != null && isTodayEventSession() && today.predictedArousal != null) {
+                return today.predictedArousal;
+            }
+            ApiModels.StartSessionData started = MemberApiManager.lastStartSession();
+            if (started != null && started.predictedArousal != null) {
+                return started.predictedArousal;
+            }
+        }
+        return null;
     }
 
     private boolean isEmaDone() {
@@ -428,6 +556,7 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     /** /today 가 FOLLOWUP 등 아직 할 세션을 내려주면, 연구 기간이 지나도 이어간다. */
     private boolean hasPendingTodaySession() {
+        if (needsFeedbackButton()) return true;
         if (today == null || today.currentType == null) return false;
         return !today.currentType.trim().isEmpty() && !isTodayAllDone();
     }
@@ -533,6 +662,9 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private String greetingForToday() {
+        if (needsFeedbackButton()) {
+            return getString(R.string.dashboard_greeting_feedback);
+        }
         String type = today != null && today.currentType != null
                 ? today.currentType.trim().toUpperCase()
                 : "";

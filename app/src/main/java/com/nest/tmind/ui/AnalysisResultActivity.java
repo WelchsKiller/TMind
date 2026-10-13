@@ -10,6 +10,7 @@ import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.RussellEmotionCalculator;
+import com.nest.tmind.util.SessionManager;
 import com.nest.tmind.view.RussellCircumplexView;
 
 /** 세 가지 미션이 끝난 뒤 Russell 사분면을 표시하고 예측을 저장한다. */
@@ -17,6 +18,9 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
 
     public static final String EXTRA_FROM_HRV = "from_hrv";
     public static final String EXTRA_ADDITIONAL = "additional";
+    public static final String EXTRA_REENTRY = "reentry";
+    public static final String EXTRA_PREDICTED_VALENCE = "predicted_valence";
+    public static final String EXTRA_PREDICTED_AROUSAL = "predicted_arousal";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,7 +54,7 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
             tvHrv.setText("-- ms");
         }
 
-        if (savedInstanceState == null && point != null) {
+        if (savedInstanceState == null && point != null && !isReentry()) {
             long at = LastEcgResult.measuredAtMs > 0
                     ? LastEcgResult.measuredAtMs
                     : System.currentTimeMillis();
@@ -89,6 +93,17 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
     }
 
     private RussellEmotionCalculator.Point buildPredictedPoint() {
+        if (getIntent().hasExtra(EXTRA_PREDICTED_VALENCE)
+                && getIntent().hasExtra(EXTRA_PREDICTED_AROUSAL)) {
+            return new RussellEmotionCalculator.Point(
+                    getIntent().getFloatExtra(EXTRA_PREDICTED_VALENCE, 0f),
+                    getIntent().getFloatExtra(EXTRA_PREDICTED_AROUSAL, 0f));
+        }
+        if (isReentry()) {
+            SessionManager sm = new SessionManager(this);
+            return new RussellEmotionCalculator.Point(
+                    sm.getLastPredictionValence(), sm.getLastPredictionArousal());
+        }
         if (!LastEcgResult.hasValid()) {
             return RussellEmotionCalculator.fromHrvStress(40);
         }
@@ -96,6 +111,10 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
                 LastEcgResult.lastStressScore,
                 LastEcgResult.lastHrvMs,
                 LastEcgResult.lastHrBpm);
+    }
+
+    private boolean isReentry() {
+        return getIntent().getBooleanExtra(EXTRA_REENTRY, false);
     }
 
     private void stylePrimaryButton(Button btn) {

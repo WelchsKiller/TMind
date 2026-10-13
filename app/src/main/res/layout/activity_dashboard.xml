@@ -109,6 +109,14 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp" />
 
+        <include
+            android:id="@+id/cardFeedback"
+            layout="@layout/item_mission_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:visibility="gone" />
+
         <!-- 추가 측정 -->
         <LinearLayout
             android:id="@+id/cardAdditional"

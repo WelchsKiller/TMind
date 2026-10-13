@@ -47,12 +47,17 @@ public final class MemberApiManager {
     /** E00503/E00504 는 한 번만 재전송한다. 원인이 그대로면 반복해도 같은 결과다. */
     private static final int HRV_MAX_ATTEMPTS = 2;
     private static volatile ApiModels.TodayResponse lastToday;
+    private static volatile ApiModels.StartSessionData lastStartSession;
 
     private MemberApiManager() {
     }
 
     public static ApiModels.TodayResponse lastToday() {
         return lastToday;
+    }
+
+    public static ApiModels.StartSessionData lastStartSession() {
+        return lastStartSession;
     }
 
     /** 심박·설문·일기 저장 성공 후, 그 시점의 /today 로 eventAvailable 등을 다시 받는다. */
@@ -208,6 +213,10 @@ public final class MemberApiManager {
                 + " hrvStatus=" + data.hrvStatus
                 + " emaDone=" + data.emaDone
                 + " diaryDone=" + data.diaryDone
+                + " predictionDone=" + data.predictionDone
+                + " feedbackDone=" + data.feedbackDone
+                + " predictedValence=" + data.predictedValence
+                + " predictedArousal=" + data.predictedArousal
                 + " eventActive=" + data.eventActive
                 + " eventAvailable=" + data.eventAvailable
                 + " missedType=" + data.missedType
@@ -282,6 +291,8 @@ public final class MemberApiManager {
         if (Boolean.TRUE.equals(data.emaDone) && todaySid > 0) {
             session.setRemoteEmaDone(todaySid);
         }
+        session.applyServerProgress(todaySid, data.predictionDone, data.feedbackDone,
+                data.predictedValence, data.predictedArousal);
     }
 
     /**
@@ -414,6 +425,16 @@ public final class MemberApiManager {
         postStartSession(context, session, true, callback);
     }
 
+    /** 기존 Event 세션을 지우지 않고 POST /session 으로 예측·피드백 상태를 다시 받는다. */
+    public static void resyncEventSession(Context context, ResultCallback<Long> callback) {
+        SessionManager session = new SessionManager(context);
+        if (!session.hasAccessToken()) {
+            forceRelogin(context, "로그인이 필요합니다. 다시 로그인해 주세요.");
+            return;
+        }
+        postStartSession(context, session, true, callback);
+    }
+
     /** 추가 측정은 예측이 끝난 정규 세션과 다른 Event 세션이 필요하다. */
     public static void startFreshEventSession(Context context, ResultCallback<Long> callback) {
         SessionManager session = new SessionManager(context);
@@ -429,9 +450,11 @@ public final class MemberApiManager {
         if (eventId <= 0) return false;
         long mainId = session.getCurrentSessionId(false);
         long todayId = session.getServerTodaySessionId();
-        if (mainId > 0 && eventId == mainId) return false;
-        if (todayId > 0 && eventId == todayId) return false;
-        return !session.isPredictionSaved(eventId);
+        if (mainId > 0 && eventId == mainId && !session.needsFeedback(eventId)) return false;
+        if (todayId > 0 && eventId == todayId && !session.needsFeedback(eventId)) return false;
+        // 예측+피드백까지 끝난 Event 는 새 세션이 필요하다.
+        if (session.isFeedbackDone(eventId)) return false;
+        return true;
     }
 
     private static void postStartSession(Context context, SessionManager session, boolean event,
@@ -470,6 +493,7 @@ public final class MemberApiManager {
                             callback.onError("추가 측정용 세션을 만들지 못했습니다. 홈에서 다시 시도해 주세요.");
                             return;
                         }
+                        lastStartSession = data;
                         session.setCurrentSessionId(event, data.sessionId);
                         if (data.hrvStatus != null) {
                             session.setRemoteHrvStatus(normalizeHrvStatus(data.hrvStatus));
@@ -480,7 +504,11 @@ public final class MemberApiManager {
                         if (data.diaryDone != null) {
                             session.setTodayDiaryDone(data.diaryDone);
                         }
-                        Log.i(TAG, "startSession ok isEvent=" + event + " sessionId=" + data.sessionId);
+                        session.applyServerProgress(data.sessionId, data.predictionDone, data.feedbackDone,
+                                data.predictedValence, data.predictedArousal);
+                        Log.i(TAG, "startSession ok isEvent=" + event + " sessionId=" + data.sessionId
+                                + " predictionDone=" + data.predictionDone
+                                + " feedbackDone=" + data.feedbackDone);
                         callback.onSuccess(data.sessionId);
                     }
 
@@ -923,6 +951,8 @@ public final class MemberApiManager {
                             return;
                         }
                         Log.d(TAG, "submitFeedback ok: sessionId=" + sessionId);
+                        new SessionManager(context).setFeedbackDone(sessionId, true);
+                        refreshTodayAfterSave(context);
                     }
 
                     @Override

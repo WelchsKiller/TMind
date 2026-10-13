@@ -42,11 +42,23 @@ public class SessionManager {
     private static final String KEY_HRV_MEASURED_AT_SID = "hrv_measured_at_session_id";
     /** 피드백은 예측이 먼저 저장된 세션에서만 받아준다(E00702). */
     public void setPredictionSaved(long sessionId) {
-        sp.edit().putLong("prediction_saved_session_id", sessionId).apply();
+        if (sessionId <= 0) {
+            clearPredictionSaved();
+            return;
+        }
+        SharedPreferences.Editor e = sp.edit();
+        if (isEventSessionId(sessionId)) {
+            e.putLong("event_prediction_saved_session_id", sessionId);
+        } else {
+            e.putLong("prediction_saved_session_id", sessionId);
+        }
+        e.apply();
     }
 
     public boolean isPredictionSaved(long sessionId) {
-        return sessionId > 0 && getPredictionSavedSessionId() == sessionId;
+        if (sessionId <= 0) return false;
+        return getPredictionSavedSessionId() == sessionId
+                || sp.getLong("event_prediction_saved_session_id", 0L) == sessionId;
     }
 
     public long getPredictionSavedSessionId() {
@@ -54,7 +66,53 @@ public class SessionManager {
     }
 
     public void clearPredictionSaved() {
-        sp.edit().remove("prediction_saved_session_id").apply();
+        sp.edit()
+                .remove("prediction_saved_session_id")
+                .remove("event_prediction_saved_session_id")
+                .apply();
+    }
+
+    public void setFeedbackDone(long sessionId, boolean done) {
+        if (sessionId <= 0) return;
+        String key = isEventSessionId(sessionId)
+                ? "event_feedback_done_session_id"
+                : "feedback_done_session_id";
+        if (done) {
+            sp.edit().putLong(key, sessionId).apply();
+        } else if (sp.getLong(key, 0L) == sessionId) {
+            sp.edit().remove(key).apply();
+        }
+    }
+
+    public boolean isFeedbackDone(long sessionId) {
+        if (sessionId <= 0) return false;
+        return sp.getLong("feedback_done_session_id", 0L) == sessionId
+                || sp.getLong("event_feedback_done_session_id", 0L) == sessionId;
+    }
+
+    /** 예측은 저장됐고 피드백만 남은 세션. */
+    public boolean needsFeedback(long sessionId) {
+        return isPredictionSaved(sessionId) && !isFeedbackDone(sessionId);
+    }
+
+    public void applyServerProgress(long sessionId, Boolean predictionDone, Boolean feedbackDone,
+                                    Float predictedValence, Float predictedArousal) {
+        if (sessionId <= 0) return;
+        if (Boolean.TRUE.equals(predictionDone)) {
+            setPredictionSaved(sessionId);
+            if (predictedValence != null && predictedArousal != null) {
+                setLastPrediction(predictedValence, predictedArousal);
+            }
+        }
+        if (feedbackDone != null) {
+            setFeedbackDone(sessionId, feedbackDone);
+        }
+    }
+
+    private boolean isEventSessionId(long sessionId) {
+        long eventId = getCurrentSessionId(true);
+        long mainId = getCurrentSessionId(false);
+        return eventId > 0 && sessionId == eventId && sessionId != mainId;
     }
 
     /** 서버 날짜가 바뀌면 어제 세션·예측 플래그를 버린다. */
@@ -67,6 +125,9 @@ public class SessionManager {
                 .remove(KEY_TODAY_EMA_DONE)
                 .remove(KEY_TODAY_DIARY_DONE)
                 .remove("prediction_saved_session_id")
+                .remove("event_prediction_saved_session_id")
+                .remove("feedback_done_session_id")
+                .remove("event_feedback_done_session_id")
                 .remove("prediction_pending_session_id")
                 .remove("remote_ema_done_session_id")
                 .remove(KEY_HRV_MEASURED_AT)
