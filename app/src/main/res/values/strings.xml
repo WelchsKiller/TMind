@@ -52,7 +52,7 @@
     <string name="session_followup">종료</string>
     <string name="session_today">오늘</string>
     <string name="session_event">추가</string>
-    <string name="star_hint">오전 미션만 완료하면 별의 왼쪽이 채워집니다.\n오후 미션만 완료하면 별의 오른쪽이 채워집니다.\n오전·오후를 모두 완료하면 별이 가득 차요.\n추가 측정을 하면 특별한 효과가 더해집니다.</string>
+    <string name="star_hint">오전·오후 미션을 각각 완료하면 별이 반 개씩 채워집니다.\n오전·오후를 모두 완료하면 별이 가득 차요.\n추가 측정까지 완료하면 별에 특별한 효과가 더해집니다.</string>
     <string name="new_participant">다른 참여자로 시작</string>
     <string name="new_participant_confirm">현재 참여자 정보를 지우고\n새 참여자를 등록할까요?</string>
     <string name="feedback_resume_title">마음 결과 확인</string>

@@ -10,7 +10,7 @@ import java.util.Locale;
 
 /**
  * 오늘 미션: 오전/오후는 시각으로 자동 결정, 추가는 EVENT 세션.
- * 별 채움: 오전=왼쪽, 오후=오른쪽, 둘 다=가득, 추가 측정=특수 효과.
+ * 별 채움: 오전=왼쪽, 오후=오른쪽, 둘 다=가득, 추가 측정=골드 링.
  */
 public class MissionManager {
 
@@ -18,7 +18,7 @@ public class MissionManager {
         MORNING, AFTERNOON, EVENT
     }
 
-    /** 0=빈, 1=오전(왼), 2=가득, 3=가득+특수, 4=오전+특수, 5=오후(오른), 6=오후+특수 */
+    /** 0=빈, 1=오전(왼), 2=가득, 3=가득+골드링, 4=오전+골드링, 5=오후(오른), 6=오후+골드링 */
     public static final int STAR_EMPTY = 0;
     public static final int STAR_HALF = 1;
     public static final int STAR_FULL = 2;

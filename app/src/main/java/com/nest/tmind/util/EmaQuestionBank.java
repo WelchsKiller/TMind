@@ -121,17 +121,28 @@ public final class EmaQuestionBank {
         return EMOJIS_INTENSITY;
     }
 
+    /** 서버가 '전혀 없었다'를 맨 위에 주면 true. 로컬 기본은 '매우 많이'가 위. */
+    public static boolean isNoneFirst(String[] labels) {
+        if (labels == null || labels.length == 0 || labels[0] == null) return false;
+        String first = labels[0].replace(" ", "");
+        return first.contains("전혀없") || first.contains("전혀그렇지");
+    }
+
     /**
      * 화면 위→아래 displayIndex 0~4 에 대응하는 drawable.
-     * 부정/강도 문항: emoji_1(빨강)…emoji_5(초록)
-     * 긍정 문항(행복·신남·차분): emoji_5(초록)…emoji_1(빨강) — "매우 그렇다"가 긍정 표정
+     * 얼굴은 '문항에서 좋은 쪽=초록, 나쁜 쪽=빨강'이다.
+     * 선택지 순서가 서버(전혀→매우) / 로컬(매우→전혀) 중 어느 쪽이든 맞춘다.
      */
     public static int drawableResFor(Item item, int displayIndex) {
+        return drawableResFor(item, displayIndex, item != null ? item.scaleLabels : null);
+    }
+
+    public static int drawableResFor(Item item, int displayIndex, String[] labels) {
         if (displayIndex < 0 || displayIndex > 4) return R.drawable.emoji_3;
-        int idx = displayIndex;
-        if (item != null && item.emotionScale && !item.negativeValence) {
-            idx = 4 - displayIndex;
-        }
+        boolean highFirst = !isNoneFirst(labels);
+        boolean positiveItem = item != null && item.emotionScale && !item.negativeValence;
+        boolean greenAtTop = positiveItem ? highFirst : !highFirst;
+        int idx = greenAtTop ? (4 - displayIndex) : displayIndex;
         switch (idx + 1) {
             case 1: return R.drawable.emoji_1;
             case 2: return R.drawable.emoji_2;
@@ -141,13 +152,28 @@ public final class EmaQuestionBank {
         }
     }
 
+    /** 1=낮음/전혀, 5=높음/매우. 선택지 표시 순서와 맞춰 계산한다. */
+    public static int scoreFromDisplayIndex(String[] labels, int displayIndex) {
+        if (displayIndex < 0 || displayIndex > 4) return 0;
+        return isNoneFirst(labels) ? displayIndex + 1 : 5 - displayIndex;
+    }
+
+    public static int displayIndexFromScore(String[] labels, int score) {
+        if (score < 1 || score > 5) return -1;
+        return isNoneFirst(labels) ? score - 1 : 5 - score;
+    }
+
     /** displayIndex 0~4 에 대한 구분 색상 (ARGB) — 레거시/텍스트용 */
     public static int colorFor(Item item, int displayIndex) {
+        return colorFor(item, displayIndex, item != null ? item.scaleLabels : null);
+    }
+
+    public static int colorFor(Item item, int displayIndex, String[] labels) {
         if (displayIndex < 0 || displayIndex > 4) return 0xFF757575;
-        if (item != null && item.emotionScale && !item.negativeValence) {
-            return COLORS_GOOD_TO_BAD[displayIndex];
-        }
-        return COLORS_BAD_TO_GOOD[displayIndex];
+        boolean highFirst = !isNoneFirst(labels);
+        boolean positiveItem = item != null && item.emotionScale && !item.negativeValence;
+        boolean greenAtTop = positiveItem ? highFirst : !highFirst;
+        return greenAtTop ? COLORS_GOOD_TO_BAD[displayIndex] : COLORS_BAD_TO_GOOD[displayIndex];
     }
 
     private static Item[] baseline() {

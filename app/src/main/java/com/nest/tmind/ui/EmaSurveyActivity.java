@@ -138,7 +138,8 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
 
         for (int i = 0; i < optionViews.length; i++) {
             final int displayIndex = i;
-            optionViews[i].setOnClickListener(v -> selectOption(scoreFromDisplayIndex(displayIndex)));
+            optionViews[i].setOnClickListener(v ->
+                    selectOption(EmaQuestionBank.scoreFromDisplayIndex(currentLabels(), displayIndex)));
         }
 
         showQuestion();
@@ -242,28 +243,26 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         return all;
     }
 
-    private int scoreFromDisplayIndex(int displayIndex) {
-        return 5 - displayIndex;
-    }
-
-    private int displayIndexFromScore(int score) {
-        if (score <= 0) return -1;
-        return 5 - score;
+    private String[] currentLabels() {
+        EmaQuestionBank.Item item = currentIndex < items.length ? items[currentIndex] : null;
+        if (remoteOptionLabels != null && currentIndex < remoteOptionLabels.length
+                && remoteOptionLabels[currentIndex] != null) {
+            return remoteOptionLabels[currentIndex];
+        }
+        if (item != null) return item.scaleLabels;
+        return EmaQuestionBank.itemsFor(sessionType)[0].scaleLabels;
     }
 
     private void bindOptionsForCurrent() {
         EmaQuestionBank.Item item = currentIndex < items.length ? items[currentIndex] : null;
-        String[] labels = remoteOptionLabels != null && currentIndex < remoteOptionLabels.length
-                && remoteOptionLabels[currentIndex] != null
-                ? remoteOptionLabels[currentIndex]
-                : (item != null ? item.scaleLabels : EmaQuestionBank.itemsFor(sessionType)[0].scaleLabels);
+        String[] labels = currentLabels();
         for (int i = 0; i < optionViews.length; i++) {
             TextView label = optionViews[i].findViewById(R.id.optLabel);
             ImageView emoji = optionViews[i].findViewById(R.id.optEmoji);
             View radio = optionViews[i].findViewById(R.id.optRadio);
             if (label != null) label.setText(labels[i]);
-            if (emoji != null && item != null) {
-                emoji.setImageResource(EmaQuestionBank.drawableResFor(item, i));
+            if (emoji != null) {
+                emoji.setImageResource(EmaQuestionBank.drawableResFor(item, i, labels));
                 emoji.setBackground(null);
             }
             if (radio != null) {
@@ -285,7 +284,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         progressBar.setProgress(currentIndex + 1);
         setupTtsButton(R.id.btnTts, prompt);
         int selected = answers[currentIndex];
-        int selectedDisplay = displayIndexFromScore(selected);
+        int selectedDisplay = EmaQuestionBank.displayIndexFromScore(currentLabels(), selected);
         for (int i = 0; i < optionViews.length; i++) {
             View radio = optionViews[i].findViewById(R.id.optRadio);
             boolean on = i == selectedDisplay;
@@ -302,7 +301,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
 
     private void selectOption(int score) {
         answers[currentIndex] = score;
-        int selectedDisplay = displayIndexFromScore(score);
+        int selectedDisplay = EmaQuestionBank.displayIndexFromScore(currentLabels(), score);
         for (int i = 0; i < optionViews.length; i++) {
             View radio = optionViews[i].findViewById(R.id.optRadio);
             boolean on = i == selectedDisplay;

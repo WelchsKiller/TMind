@@ -722,7 +722,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void renderStars() {
         starRow.removeAllViews();
         float d = getResources().getDisplayMetrics().density;
-        int size = (int) (36 * d);
+        int size = (int) (40 * d);
         int pad = (int) (3 * d);
         int[] states = starStates();
         for (int i = 0; i < states.length; i++) {
@@ -755,7 +755,7 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     /**
      * 오전=왼쪽, 오후=오른쪽, 둘 다=가득.
-     * 추가 측정(event)이 있으면 특수 효과. AM/PM 구분은 participation days 를 우선한다.
+     * 추가 측정(event)이 있으면 골드 링. AM/PM 구분은 participation days 를 우선한다.
      */
     private int[] starStates() {
         int[] row = new int[7];
@@ -793,10 +793,10 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private static String describeUiStar(int state) {
-        if (state == MissionManager.STAR_BONUS) return "가득+특수";
+        if (state == MissionManager.STAR_BONUS) return "가득+링";
         if (state == MissionManager.STAR_FULL) return "가득";
-        if (state == MissionManager.STAR_HALF_BONUS) return "왼쪽+특수";
-        if (state == MissionManager.STAR_HALF_RIGHT_BONUS) return "오른쪽+특수";
+        if (state == MissionManager.STAR_HALF_BONUS) return "왼쪽+링";
+        if (state == MissionManager.STAR_HALF_RIGHT_BONUS) return "오른쪽+링";
         if (state == MissionManager.STAR_HALF_RIGHT) return "오른쪽";
         if (state == MissionManager.STAR_HALF) return "왼쪽";
         return "빈";

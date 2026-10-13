@@ -2,5 +2,5 @@
 <resources>
     <dimen name="hrv_timer_size">184dp</dimen>
     <dimen name="hrv_info_min_height">76dp</dimen>
-    <dimen name="hrv_ecg_min_height">96dp</dimen>
+    <dimen name="hrv_ecg_min_height">200dp</dimen>
 </resources>

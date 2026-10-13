@@ -1,18 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="28dp"
-    android:height="28dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <!-- 오후만 완료 + 추가 측정 특수 효과 -->
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+    <!-- 오후만 + 추가측정. 오른쪽 채움, 빈 쪽 회색, 동일 골드 링 -->
     <path
-        android:fillColor="#D0D5DD"
-        android:pathData="M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z" />
+        android:fillAlpha="0"
+        android:fillColor="#F5C518"
+        android:pathData="M20,20m-18,0a18,18 0,1 1,36 0a18,18 0,1 1,-36 0"
+        android:strokeWidth="1"
+        android:strokeAlpha="0.3"
+        android:strokeColor="#F5C518" />
     <path
-        android:fillColor="#FFD700"
-        android:pathData="M12,2 L12,17.27 L18.18,21 L16.54,14.24 L22,9.24 L14.81,8.63 Z" />
-    <path
-        android:fillColor="#E0B84A"
-        android:fillAlpha="0.45"
-        android:pathData="M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z" />
+        android:fillAlpha="0"
+        android:fillColor="#F5C518"
+        android:pathData="M20,20m-16,0a16,16 0,1 1,32 0a16,16 0,1 1,-32 0"
+        android:strokeWidth="2"
+        android:strokeColor="#F5C518" />
+    <group
+        android:translateX="8"
+        android:translateY="8.5">
+        <path
+            android:fillColor="#D0D5DD"
+            android:pathData="M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z" />
+        <path
+            android:fillColor="#F5C518"
+            android:pathData="M12,2 L12,17.27 L18.18,21 L16.54,14.24 L22,9.24 L14.81,8.63 Z" />
+    </group>
 </vector>

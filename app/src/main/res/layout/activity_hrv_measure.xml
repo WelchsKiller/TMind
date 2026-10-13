@@ -21,7 +21,7 @@
         <TextView android:id="@+id/step3" android:layout_width="32dp" android:layout_height="32dp" android:background="@drawable/bg_step_dot" android:gravity="center" android:text="3" android:textColor="@color/white" android:textSize="16sp" />
     </LinearLayout>
 
-    <FrameLayout android:layout_width="@dimen/hrv_timer_size" android:layout_height="@dimen/hrv_timer_size" android:layout_gravity="center" android:layout_marginTop="16dp">
+    <FrameLayout android:layout_width="@dimen/hrv_timer_size" android:layout_height="@dimen/hrv_timer_size" android:layout_gravity="center" android:layout_marginTop="8dp">
         <com.nest.tmind.view.CircularProgressView android:id="@+id/circularProgress" android:layout_width="match_parent" android:layout_height="match_parent" />
         <TextView android:id="@+id/tvTimer" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="5:00" android:textColor="@color/black" android:textSize="40sp" android:textStyle="bold" />
     </FrameLayout>
@@ -30,9 +30,8 @@
         android:id="@+id/tvTimerLabel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:gravity="center"
-        android:minHeight="40dp"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:text="@string/connecting_device"
@@ -56,7 +55,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="8dp"
         android:minHeight="@dimen/hrv_ecg_min_height"
         android:background="@drawable/bg_ecg_panel"
         android:clipToOutline="true">
