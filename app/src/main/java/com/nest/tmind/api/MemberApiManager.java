@@ -139,8 +139,12 @@ public final class MemberApiManager {
                 }
                 ApiModels.ApiResponse<ApiModels.TodayResponse> body = response.body();
                 if (!response.isSuccessful() || body == null || !body.isSuccess()) {
+                    String detail = errorMessage(response, body, "오늘 세션 정보를 불러오지 못했습니다.");
+                    Log.w("TMindToday", "GET /today failed http=" + response.code()
+                            + " code=" + (body != null ? body.code : null)
+                            + " msg=" + detail);
                     if (callback != null) {
-                        callback.onError(errorMessage(response, body, "오늘 세션 정보를 불러오지 못했습니다."));
+                        callback.onError(detail);
                     }
                     return;
                 }
@@ -213,7 +217,40 @@ public final class MemberApiManager {
                 + " stars=" + data.stars
                 + " serverDate=" + data.serverDate
                 + " eventGuideText=" + data.eventGuideText);
+        logTodayStars(data);
         Log.i("TMindToday", "GET /today json=" + GSON.toJson(data));
+    }
+
+    /** Logcat 필터: TMindToday. stars 1=빈, 2=한쪽, 3=한쪽+추가, 4=오전+오후, 5=둘다+추가 */
+    private static void logTodayStars(ApiModels.TodayResponse data) {
+        if (data.stars == null) {
+            Log.i("TMindToday", "GET /today stars=null (서버가 배열을 안 줌)");
+            return;
+        }
+        Log.i("TMindToday", "GET /today stars.size=" + data.stars.size()
+                + " raw=" + data.stars);
+        int n = data.stars.size();
+        for (int i = 0; i < n; i++) {
+            Integer v = data.stars.get(i);
+            int star = v != null ? v : 1;
+            Log.i("TMindToday", "GET /today stars[" + i + "]=" + star
+                    + " (" + describeServerStar(star) + ")");
+        }
+    }
+
+    private static String describeServerStar(int star) {
+        switch (star) {
+            case 2:
+                return "한쪽만(오전 또는 오후, 서버는 구분 안 함)";
+            case 3:
+                return "한쪽+추가측정";
+            case 4:
+                return "오전+오후";
+            case 5:
+                return "오전+오후+추가측정";
+            default:
+                return "안 함/빈 별";
+        }
     }
 
     /**

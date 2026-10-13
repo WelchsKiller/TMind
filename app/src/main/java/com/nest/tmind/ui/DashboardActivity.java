@@ -2,6 +2,7 @@ package com.nest.tmind.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -635,7 +636,38 @@ public class DashboardActivity extends BaseSeniorActivity {
             }
         }
         applyStarSidesFromParticipation(row);
+        logStarMapping(row);
         return row;
+    }
+
+    private void logStarMapping(int[] row) {
+        StringBuilder sb = new StringBuilder("star map");
+        if (today != null && today.stars != null) {
+            sb.append(" server=").append(today.stars);
+        } else {
+            sb.append(" server=null");
+        }
+        sb.append(" ui=");
+        for (int i = 0; i < row.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(describeUiStar(row[i]));
+        }
+        if (participation != null && participation.today != null) {
+            sb.append(" todayAm=").append(participation.today.amDone)
+                    .append(" todayPm=").append(participation.today.pmDone)
+                    .append(" eventCount=").append(participation.today.eventCount);
+        }
+        Log.i("TMindToday", sb.toString());
+    }
+
+    private static String describeUiStar(int state) {
+        if (state == MissionManager.STAR_BONUS) return "가득+특수";
+        if (state == MissionManager.STAR_FULL) return "가득";
+        if (state == MissionManager.STAR_HALF_BONUS) return "왼쪽+특수";
+        if (state == MissionManager.STAR_HALF_RIGHT_BONUS) return "오른쪽+특수";
+        if (state == MissionManager.STAR_HALF_RIGHT) return "오른쪽";
+        if (state == MissionManager.STAR_HALF) return "왼쪽";
+        return "빈";
     }
 
     private void applyStarSidesFromParticipation(int[] row) {

@@ -254,7 +254,6 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         }
         String num = String.valueOf(sec);
         tvTimer.setText(num);
-        tvTimerLabel.setText(num);
         tvSignal.setText(num);
         if (tts != null) tts.speak(num);
         handler.postDelayed(() -> runPreStartCountdown(sec - 1), 1000);
