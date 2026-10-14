@@ -48,23 +48,14 @@ public final class EmaQuestionBank {
     };
 
     private static final String[] EMOJIS_AGREE = {"😊", "🙂", "😐", "🙁", "😢"};
-    private static final String[] EMOJIS_INTENSITY = {"😣", "😟", "😐", "🙂", "😌"};
 
-    /** 통증/감정 스케일 색상: 표시 인덱스 0→4 (녹→적 또는 적→녹은 emotionScale에 따름) */
+    /** 화면 위→아래 고정: 초록 → 연두 → 노랑 → 주황 → 빨강 */
     private static final int[] COLORS_GOOD_TO_BAD = {
-            0xFF2E7D32, // green
-            0xFF8BC34A, // light green
-            0xFFFBC02D, // yellow
-            0xFFFF9800, // orange
-            0xFFE53935  // red
-    };
-
-    private static final int[] COLORS_BAD_TO_GOOD = {
-            0xFFE53935,
-            0xFFFF9800,
-            0xFFFBC02D,
+            0xFF2E7D32,
             0xFF8BC34A,
-            0xFF2E7D32
+            0xFFFBC02D,
+            0xFFFF9800,
+            0xFFE53935
     };
 
     private EmaQuestionBank() {
@@ -115,10 +106,7 @@ public final class EmaQuestionBank {
     }
 
     public static String[] emojisFor(Item item) {
-        if (item != null && item.emotionScale && !item.negativeValence) {
-            return EMOJIS_AGREE; // 긍정 문항: 좋음(위) → 나쁨(아래)
-        }
-        return EMOJIS_INTENSITY;
+        return EMOJIS_AGREE;
     }
 
     /** 서버가 '전혀 없었다'를 맨 위에 주면 true. 로컬 기본은 '매우 많이'가 위. */
@@ -129,26 +117,20 @@ public final class EmaQuestionBank {
     }
 
     /**
-     * 화면 위→아래 displayIndex 0~4 에 대응하는 drawable.
-     * 얼굴은 '문항에서 좋은 쪽=초록, 나쁜 쪽=빨강'이다.
-     * 선택지 순서가 서버(전혀→매우) / 로컬(매우→전혀) 중 어느 쪽이든 맞춘다.
+     * 화면 위→아래 고정: 초록 웃음 → 연두 웃음 → 노랑 → 주황 찡그림 → 빨강.
      */
     public static int drawableResFor(Item item, int displayIndex) {
-        return drawableResFor(item, displayIndex, item != null ? item.scaleLabels : null);
+        return drawableResFor(item, displayIndex, null);
     }
 
     public static int drawableResFor(Item item, int displayIndex, String[] labels) {
         if (displayIndex < 0 || displayIndex > 4) return R.drawable.emoji_3;
-        boolean highFirst = !isNoneFirst(labels);
-        boolean positiveItem = item != null && item.emotionScale && !item.negativeValence;
-        boolean greenAtTop = positiveItem ? highFirst : !highFirst;
-        int idx = greenAtTop ? (4 - displayIndex) : displayIndex;
-        switch (idx + 1) {
-            case 1: return R.drawable.emoji_1;
-            case 2: return R.drawable.emoji_2;
-            case 3: return R.drawable.emoji_3;
-            case 4: return R.drawable.emoji_4;
-            default: return R.drawable.emoji_5;
+        switch (displayIndex) {
+            case 0: return R.drawable.emoji_5;
+            case 1: return R.drawable.emoji_4;
+            case 2: return R.drawable.emoji_3;
+            case 3: return R.drawable.emoji_2;
+            default: return R.drawable.emoji_1;
         }
     }
 
@@ -170,10 +152,7 @@ public final class EmaQuestionBank {
 
     public static int colorFor(Item item, int displayIndex, String[] labels) {
         if (displayIndex < 0 || displayIndex > 4) return 0xFF757575;
-        boolean highFirst = !isNoneFirst(labels);
-        boolean positiveItem = item != null && item.emotionScale && !item.negativeValence;
-        boolean greenAtTop = positiveItem ? highFirst : !highFirst;
-        return greenAtTop ? COLORS_GOOD_TO_BAD[displayIndex] : COLORS_BAD_TO_GOOD[displayIndex];
+        return COLORS_GOOD_TO_BAD[displayIndex];
     }
 
     private static Item[] baseline() {

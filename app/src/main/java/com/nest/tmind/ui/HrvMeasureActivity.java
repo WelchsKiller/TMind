@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -372,7 +373,14 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         saveMetrics();
         EcgResultAnalyzer.Result analyzed = EcgResultAnalyzer.analyze(this);
         if (analyzed == null || !analyzed.valid) {
+            Log.w("HrvMeasure", "measure finished but analysis invalid"
+                    + " valid=" + (analyzed != null && analyzed.valid)
+                    + " hr=" + (analyzed != null ? analyzed.hrBpm : -1)
+                    + " hrv=" + (analyzed != null ? analyzed.hrvMs : -1));
             LastEcgResult.clearCurrent(this);
+        } else {
+            Log.i("HrvMeasure", "measure finished ok hr=" + analyzed.hrBpm
+                    + " hrv=" + analyzed.hrvMs + " ms");
         }
         stopBleCompletely();
 

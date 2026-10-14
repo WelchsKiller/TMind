@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="hrv_timer_size">184dp</dimen>
+    <dimen name="hrv_timer_size">240dp</dimen>
     <dimen name="hrv_info_min_height">76dp</dimen>
     <dimen name="hrv_ecg_min_height">200dp</dimen>
 </resources>

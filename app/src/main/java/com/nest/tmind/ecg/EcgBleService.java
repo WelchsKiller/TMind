@@ -1285,6 +1285,13 @@ public class EcgBleService extends Service {
 
         boolean contact = everHadHr && framesWithoutHr <= CONTACT_LOST_FRAMES;
 
+        // 기기 HR 프레임이 잠깐 비어도 5분 원본은 모아 둔다.
+        // 예전에 접촉 중에만 저장해서, 화면은 파형이 있는데 결과는 미측정이 됐다.
+        if (measuring) {
+            EcgCapture.i().setFs(FS_PLOT);
+            EcgCapture.i().add(mv25);
+        }
+
         if (!contact) {
             haveHr = false;
             prevMv25 = mv25;
@@ -1308,10 +1315,6 @@ public class EcgBleService extends Service {
         }
         lastSignalGood = true;
         haveHr = latestHr != null;
-
-        // 그래프/저장용 (접촉 중)
-        EcgCapture.i().setFs(FS_PLOT);
-        EcgCapture.i().add(mv25);
 
         // RMS 기반 스케일
         if (prevMv25 != null) {
