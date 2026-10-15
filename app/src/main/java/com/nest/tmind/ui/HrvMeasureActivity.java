@@ -372,19 +372,16 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         // BLE 종료 전에 분석·저장해야 재측정 시 결과가 갱신됨
         saveMetrics();
         EcgResultAnalyzer.Result analyzed = EcgResultAnalyzer.analyze(this);
-        double validRatio = MeasureSessionStats.validRatio();
-        boolean enough = MeasureSessionStats.hasEnoughValidData();
-        if (analyzed == null || !analyzed.valid || !enough) {
-            Log.w("HrvMeasure", "measure finished but analysis invalid"
-                    + " valid=" + (analyzed != null && analyzed.valid)
-                    + " validRatio=" + validRatio
-                    + " hr=" + (analyzed != null ? analyzed.hrBpm : -1)
-                    + " hrv=" + (analyzed != null ? analyzed.hrvMs : -1));
+        boolean anyData = MeasureSessionStats.hasMeasurementData()
+                || (analyzed != null && analyzed.valid);
+        if (!anyData) {
+            Log.w("HrvMeasure", "measure finished with no data");
             LastEcgResult.clearCurrent(this);
-        } else {
+        } else if (analyzed != null && analyzed.valid && isHumanHrv(analyzed.hrvMs)) {
             Log.i("HrvMeasure", "measure finished ok hr=" + analyzed.hrBpm
-                    + " hrv=" + analyzed.hrvMs + " ms"
-                    + " validRatio=" + validRatio);
+                    + " hrv=" + analyzed.hrvMs + " ms");
+        } else {
+            publishSessionAverage();
         }
         stopBleCompletely();
 
@@ -399,6 +396,30 @@ public class HrvMeasureActivity extends BaseSeniorActivity
                     finish();
                 })
                 .show();
+    }
+
+    /** 안정 시 심박변이도가 이 값을 넘으면 잡음으로 보고 화면에 올리지 않는다. */
+    private static boolean isHumanHrv(int hrvMs) {
+        return hrvMs > 0 && hrvMs <= 200;
+    }
+
+    /**
+     * 파형 분석이 비어도, 측정 중 모인 심박·간격은 평균해서 보여 준다.
+     * 사람에게 나올 수 없는 심박변이도는 평균에 넣지 않는다.
+     */
+    private void publishSessionAverage() {
+        int hr = MeasureSessionStats.averageHr();
+        int rr = MeasureSessionStats.averageRrMs();
+        int hrv = MeasureSessionStats.averageHrvMs();
+        if (hr < 40 || hr > 180 || !isHumanHrv(hrv)) {
+            Log.w("HrvMeasure", "session average unusable hr=" + hr + " hrv=" + hrv);
+            LastEcgResult.clearCurrent(this);
+            return;
+        }
+        int hrvForScore = Math.max(20, Math.min(160, hrv));
+        int stress = Math.round(((160f - hrvForScore) / 140f) * 100f);
+        LastEcgResult.updateAndSave(this, null, 250, hr, hrv, rr, stress, System.currentTimeMillis());
+        Log.i("HrvMeasure", "session average hr=" + hr + " hrv=" + hrv + " ms");
     }
 
     private void saveMetrics() {

@@ -9,11 +9,6 @@ import java.util.Arrays;
  */
 public final class MeasureSessionStats {
 
-    /** 5분 측정, 프레임 100ms. 유효 비율은 이 길이를 기준으로 한다. */
-    private static final int SESSION_FRAMES = 5 * 60 * 10;
-    /** 기기 심박이 잡힌 시간이 이 비율 미만이면 재측정. 0%도 여기에 포함된다. */
-    private static final double MIN_VALID_RATIO = 0.50;
-
     private static final ArrayList<Integer> hrSamples = new ArrayList<>();
     private static final ArrayList<Integer> rrSamples = new ArrayList<>();
     private static final ArrayList<Integer> hrvSamples = new ArrayList<>();
@@ -34,13 +29,9 @@ public final class MeasureSessionStats {
         if (contact) contactFrames++;
     }
 
-    /** 5분 중 심박이 잡힌 비율. 데이터가 없으면 0. */
-    public static synchronized double validRatio() {
-        return contactFrames / (double) SESSION_FRAMES;
-    }
-
-    public static synchronized boolean hasEnoughValidData() {
-        return validRatio() >= MIN_VALID_RATIO;
+    /** 측정 중 심박이 한 번이라도 들어왔으면 true. 한 번도 없으면 측정률 0%. */
+    public static synchronized boolean hasMeasurementData() {
+        return contactFrames > 0 || !hrSamples.isEmpty();
     }
 
     /** 생리적 범위의 HR만 누적 (40~180 bpm) */
