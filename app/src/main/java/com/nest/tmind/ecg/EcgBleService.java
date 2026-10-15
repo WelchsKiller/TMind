@@ -1290,6 +1290,7 @@ public class EcgBleService extends Service {
         if (measuring) {
             EcgCapture.i().setFs(FS_PLOT);
             EcgCapture.i().add(mv25);
+            MeasureSessionStats.addMeasureFrame(contact);
         }
 
         if (!contact) {

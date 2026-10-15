@@ -37,7 +37,8 @@ public final class EcgResultAnalyzer {
 
         ResourceManager.Level level = ResourceManager.getLevel(ctx);
         r.resourceLevel = level.name();
-        int stride = ResourceManager.sampleStride(level);
+        // 임상 HRV 는 샘플을 건너뛰면 R파 위치가 흔들려 SDNN 이 커진다. 항상 원본 샘플링으로 계산한다.
+        int stride = 1;
         boolean heavy = ResourceManager.useHeavyFilters(level);
         int spikeLen = ResourceManager.spikeLength(level);
         Log.i(TAG, "analyze resource=" + level.name()
@@ -186,7 +187,9 @@ public final class EcgResultAnalyzer {
     private static ArrayList<Integer> detectRPeaks(double[] x, int fs) {
         ArrayList<Integer> idx = new ArrayList<>();
         double ema = 0, noise = 0;
-        int refr = Math.round(0.260f * fs);
+        // 안정 시 T파가 R파로 잡히면 짧은 간격과 긴 간격이 섞여 SDNN 이 수백 ms 가 된다.
+        // 400ms 안에는 다음 QRS 가 오지 않는 안정 심박(150bpm 이하)만 본다.
+        int refr = Math.round(0.400f * fs);
         int last = -refr;
         for (int i = 0; i < x.length; i++) {
             ema = 0.995 * ema + 0.005 * x[i];
@@ -240,18 +243,11 @@ public final class EcgResultAnalyzer {
     }
 
     private static int computeAvgRrMs(ArrayList<Integer> rloc, int fs) {
-        if (rloc == null || rloc.size() < 2) return 0;
-        ArrayList<Double> rrMs = new ArrayList<>();
-        for (int i = 1; i < rloc.size(); i++) {
-            int d = rloc.get(i) - rloc.get(i - 1);
-            if (d <= 0) continue;
-            double ms = 1000.0 * d / fs;
-            // 생리적 RR만 평균에 포함 (HR 약 40~200 bpm)
-            if (ms < 300.0 || ms > 1500.0) continue;
-            rrMs.add(ms);
-        }
-        if (rrMs.isEmpty()) return 0;
-        return (int) Math.round(trimmedMean(rrMs));
+        double[] nn = normalNnMs(rloc, fs);
+        if (nn.length == 0) return 0;
+        ArrayList<Double> values = new ArrayList<>();
+        for (double v : nn) values.add(v);
+        return (int) Math.round(trimmedMean(values));
     }
 
     /** 상·하위 10% 제거 후 평균 (이상치로 인한 과소/과대 HR 방지) */
@@ -274,42 +270,64 @@ public final class EcgResultAnalyzer {
         return cnt == 0 ? 0 : sum / cnt;
     }
 
-    private static int computeHrvMs(ArrayList<Integer> rloc, int fs) {
-        if (rloc == null || rloc.size() < 3) return 0;
+    /**
+     * 정상 박동(NN)만 남긴 RR(ms).
+     * 중앙값의 ±20% 밖, 또는 직전 정상 박동과 20% 넘게 차이 나는 간격은
+     * T파·잡음으로 보고 버린다. 예전 50%~180% 구간은 그 잡음을 살려 SDNN 이 300에 걸렸다.
+     */
+    static double[] normalNnMs(ArrayList<Integer> rloc, int fs) {
+        if (rloc == null || rloc.size() < 3 || fs <= 0) return new double[0];
         ArrayList<Double> rrMsList = new ArrayList<>();
         for (int i = 1; i < rloc.size(); i++) {
             int dSamples = rloc.get(i) - rloc.get(i - 1);
             if (dSamples <= 0) continue;
             double dMs = 1000.0 * dSamples / fs;
-            if (dMs < 300.0 || dMs > 2000.0) continue;
+            if (dMs < 333.0 || dMs > 1500.0) continue;
             rrMsList.add(dMs);
         }
-        if (rrMsList.size() < 2) return 0;
+        if (rrMsList.size() < 2) return new double[0];
         double[] tmp = new double[rrMsList.size()];
         for (int i = 0; i < rrMsList.size(); i++) tmp[i] = rrMsList.get(i);
         Arrays.sort(tmp);
         double median = (tmp.length % 2 == 1)
                 ? tmp[tmp.length / 2]
                 : (tmp[tmp.length / 2 - 1] + tmp[tmp.length / 2]) / 2.0;
-        ArrayList<Double> filtered = new ArrayList<>();
+        ArrayList<Double> band = new ArrayList<>();
         for (double v : rrMsList) {
-            if (v < median * 0.5 || v > median * 1.8) continue;
-            filtered.add(v);
+            if (v < median * 0.80 || v > median * 1.20) continue;
+            band.add(v);
         }
-        if (filtered.size() < 2) filtered = rrMsList;
-        if (filtered.size() < 2) return 0;
+        if (band.size() < 2) return new double[0];
+        ArrayList<Double> nn = new ArrayList<>();
+        double prev = band.get(0);
+        nn.add(prev);
+        for (int i = 1; i < band.size(); i++) {
+            double v = band.get(i);
+            if (Math.abs(v - prev) / prev <= 0.20) {
+                nn.add(v);
+                prev = v;
+            }
+        }
+        if (nn.size() < 8) return new double[0];
+        double[] out = new double[nn.size()];
+        for (int i = 0; i < nn.size(); i++) out[i] = nn.get(i);
+        return out;
+    }
+
+    private static int computeHrvMs(ArrayList<Integer> rloc, int fs) {
+        double[] nn = normalNnMs(rloc, fs);
+        if (nn.length < 8) return 0;
         double sum = 0.0;
-        for (double v : filtered) sum += v;
-        double mean = sum / filtered.size();
+        for (double v : nn) sum += v;
+        double mean = sum / nn.length;
         double var = 0.0;
-        for (double v : filtered) {
+        for (double v : nn) {
             double diff = v - mean;
             var += diff * diff;
         }
-        var /= filtered.size();
+        var /= (nn.length - 1);
         int sdnnMs = (int) Math.round(Math.sqrt(var));
         if (sdnnMs < 0) sdnnMs = 0;
-        if (sdnnMs > 300) sdnnMs = 300;
         return sdnnMs;
     }
 

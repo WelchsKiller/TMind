@@ -372,15 +372,19 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         // BLE 종료 전에 분석·저장해야 재측정 시 결과가 갱신됨
         saveMetrics();
         EcgResultAnalyzer.Result analyzed = EcgResultAnalyzer.analyze(this);
-        if (analyzed == null || !analyzed.valid) {
+        double validRatio = MeasureSessionStats.validRatio();
+        boolean enough = MeasureSessionStats.hasEnoughValidData();
+        if (analyzed == null || !analyzed.valid || !enough) {
             Log.w("HrvMeasure", "measure finished but analysis invalid"
                     + " valid=" + (analyzed != null && analyzed.valid)
+                    + " validRatio=" + validRatio
                     + " hr=" + (analyzed != null ? analyzed.hrBpm : -1)
                     + " hrv=" + (analyzed != null ? analyzed.hrvMs : -1));
             LastEcgResult.clearCurrent(this);
         } else {
             Log.i("HrvMeasure", "measure finished ok hr=" + analyzed.hrBpm
-                    + " hrv=" + analyzed.hrvMs + " ms");
+                    + " hrv=" + analyzed.hrvMs + " ms"
+                    + " validRatio=" + validRatio);
         }
         stopBleCompletely();
 
