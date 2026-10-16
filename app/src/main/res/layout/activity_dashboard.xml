@@ -48,7 +48,8 @@
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
                 android:maxLines="3"
-                android:text="@string/dashboard_greeting" />
+                android:text="@string/dashboard_greeting"
+                android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnLogout"
@@ -69,11 +70,29 @@
                 android:textStyle="bold" />
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/tvPhaseBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_phase_badge_baseline"
+            android:gravity="center"
+            android:paddingStart="18dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="18dp"
+            android:paddingBottom="8dp"
+            android:text="@string/phase_baseline"
+            android:textColor="@color/baseline_blue"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/starRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="14dp"
             android:clipChildren="false"
             android:clipToPadding="false"
             android:gravity="center"
@@ -84,11 +103,12 @@
             style="@style/SeniorBody"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="10dp"
             android:gravity="center"
+            android:lineSpacingExtra="3dp"
             android:text="@string/star_hint"
             android:textColor="@color/text_secondary"
-            android:textSize="14sp" />
+            android:textSize="15sp" />
 
         <include
             android:id="@+id/cardHrv"

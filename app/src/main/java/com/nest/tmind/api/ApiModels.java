@@ -112,6 +112,10 @@ public final class ApiModels {
         public String eventGuideText;
         /** 반복측정(오전/오후)을 완료한 날 수. Baseline/Follow-up 은 세지 않는다. */
         public Integer participatedDays;
+        /** Baseline 세션 완료 여부. 없으면 앱이 currentType·별 상태로 판별한다. */
+        public Boolean baselineDone;
+        /** Follow-up 세션 완료 여부. 없으면 앱이 currentType·별 상태로 판별한다. */
+        public Boolean followupDone;
         /**
          * 반복측정 1일차부터 날짜순 7칸.
          * 1=안함, 2=오전/오후 중 1개, 3=1개+추가, 4=오전+오후, 5=둘 다+추가.

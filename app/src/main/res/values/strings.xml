@@ -29,14 +29,20 @@
 
     <!-- Dashboard -->
     <string name="dashboard_title">오늘의 기록</string>
-    <string name="dashboard_greeting">오늘도 함께해요</string>
+    <string name="dashboard_greeting">미션을 시작해 주세요.</string>
+    <string name="dashboard_greeting_mission_start">미션을 시작해 주세요.</string>
+    <string name="dashboard_greeting_mission_done">미션을 모두 완료했어요.</string>
     <string name="dashboard_greeting_am_start">오전 미션을 시작해 주세요.</string>
+    <string name="dashboard_greeting_am_done">오전 미션을 완료했어요.</string>
     <string name="dashboard_greeting_pm_start">오후 미션을 시작해 주세요.</string>
-    <string name="dashboard_greeting_am_missed">오전 미션을 놓치셨어요. 오후 미션을 시작해 주세요.</string>
-    <string name="dashboard_greeting_am_pm_done">오전·오후 미션을 모두 완료했어요!</string>
+    <string name="dashboard_greeting_pm_done">오후 미션을 완료했어요.</string>
+    <string name="dashboard_greeting_am_missed">오후 미션을 시작해 주세요.</string>
+    <string name="dashboard_greeting_am_pm_done">미션을 모두 완료했어요.</string>
     <string name="logout">로그아웃</string>
     <string name="logout_confirm">로그아웃할까요?\n다시 참여하려면 번호를 입력해 주세요.</string>
-    <string name="dashboard_greeting_named">%1$s 님, 오늘도 함께해요</string>
+    <string name="dashboard_greeting_named">%1$s 님, 미션을 시작해 주세요.</string>
+    <string name="phase_baseline">BASELINE</string>
+    <string name="phase_followup">FOLLOW-UP</string>
     <string name="mission_hrv">심박변이도 측정</string>
     <string name="mission_hrv_sub">5분 안정 측정 후 결과 확인</string>
     <string name="mission_ema">마음 상태 설문</string>
@@ -52,7 +58,7 @@
     <string name="session_followup">종료</string>
     <string name="session_today">오늘</string>
     <string name="session_event">추가</string>
-    <string name="star_hint">오전·오후 미션을 각각 완료하면 별이 반 개씩 채워집니다.\n오전·오후를 모두 완료하면 별이 가득 차요.\n추가 측정까지 완료하면 별에 특별한 효과가 더해집니다.</string>
+    <string name="star_hint">매일 오전과 오후에 미션을 완료해 주세요.\n하루 미션을 모두 완료하면 오늘의 별이 채워져요.\n일주일 동안 별 7개를 모두 모아 보세요!</string>
     <string name="new_participant">다른 참여자로 시작</string>
     <string name="new_participant_confirm">현재 참여자 정보를 지우고\n새 참여자를 등록할까요?</string>
     <string name="feedback_resume_title">마음 결과 확인</string>
@@ -147,8 +153,7 @@
     <string name="ema_intro_title">설문 안내</string>
     <string name="ema_intro_tag">시작 전 안내</string>
     <string name="ema_intro_lead">이제부터 마음 상태에 대한 설문을 시작하겠습니다.</string>
-    <string name="ema_intro_body_morning">오전에 진행하실 설문은\n총 %1$d문항으로 구성되어 있으며,\n\n각 문항에 대해 \'매우 많이 있었다\' ~\n\'전혀 없었다\'의 5개 응답 중 가장\n해당하는 응답을 골라주세요.</string>
-    <string name="ema_intro_body_afternoon">오후에 진행하실 설문은\n총 %1$d문항으로 구성되어 있으며,\n\n각 문항에 대해 \'매우 많이 있었다\' ~\n\'전혀 없었다\'의 5개 응답 중 가장\n해당하는 응답을 골라주세요.</string>
+    <string name="ema_intro_body">진행하실 설문은\n총 %1$d문항으로 구성되어 있으며,\n\n각 문항에 대해 \'매우 많이 있었다\' ~\n\'전혀 없었다\'의 5개 응답 중 가장\n해당하는 응답을 골라주세요.</string>
     <string name="ema_intro_body_extra">추가로 진행하실 설문은\n총 %1$d문항으로 구성되어 있으며,\n\n각 문항에 대해 \'매우 많이 있었다\' ~\n\'전혀 없었다\'의 5개 응답 중 가장\n해당하는 응답을 골라주세요.</string>
     <string name="ema_intro_start">설문 시작</string>
     <string name="ema_tip_title">기억해 주세요!</string>

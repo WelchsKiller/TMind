@@ -28,7 +28,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     private SessionManager session;
 
     private View cardHrv, cardEma, cardDiary, cardFeedback, cardAdditional;
-    private TextView tvGreeting, tvProgress, tvAdditionalSub;
+    private TextView tvGreeting, tvProgress, tvAdditionalSub, tvPhaseBadge;
     private LinearLayout starRow;
     private ProgressBar progressBar;
     private View btnWeeklyTrend;
@@ -53,6 +53,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         mission = new MissionManager(this);
 
         tvGreeting = findViewById(R.id.tvGreeting);
+        tvPhaseBadge = findViewById(R.id.tvPhaseBadge);
         tvProgress = findViewById(R.id.tvProgress);
         cardHrv = findViewById(R.id.cardHrv);
         cardEma = findViewById(R.id.cardEma);
@@ -71,7 +72,7 @@ public class DashboardActivity extends BaseSeniorActivity {
                 R.string.feedback_resume_sub);
 
         tvGreeting.setText(R.string.dashboard_greeting);
-        setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvGreeting, R.id.tvProgress);
+        setupTtsFromViews(R.id.btnTts, R.id.tvTitle, R.id.tvGreeting, R.id.tvStarHint, R.id.tvProgress);
 
         findViewById(R.id.btnLogout).setOnClickListener(v -> confirmLogout());
         cardHrv.setOnClickListener(v -> onHrvClick());
@@ -421,6 +422,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         btnWeeklyTrend.setVisibility(participatedDays() >= 7 ? View.VISIBLE : View.GONE);
 
         updateGreeting();
+        updatePhaseBadge();
         refreshAdditionalCard();
         renderStars();
     }
@@ -623,6 +625,7 @@ public class DashboardActivity extends BaseSeniorActivity {
                         runOnUiThread(() -> {
                             participation = data;
                             updateGreeting();
+                            updatePhaseBadge();
                             renderStars();
                             btnWeeklyTrend.setVisibility(
                                     participatedDays() >= 7 ? View.VISIBLE : View.GONE);
@@ -649,6 +652,7 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void applyTodayResponse(ApiModels.TodayResponse data) {
         if (data == null) return;
         today = data;
+        syncPhaseFlagsFromToday(data);
         MissionManager.Session main = mapCurrentType(data.currentType);
         mission.syncFromServer(main,
                 MemberApiManager.isTodayHrvValid(data),
@@ -657,30 +661,123 @@ public class DashboardActivity extends BaseSeniorActivity {
         refreshUi();
     }
 
+    private void syncPhaseFlagsFromToday(ApiModels.TodayResponse data) {
+        if (data == null) return;
+        if (Boolean.TRUE.equals(data.baselineDone)) {
+            session.setBaselineDone(true);
+        }
+        if (Boolean.TRUE.equals(data.followupDone)) {
+            session.setFollowupDone(true);
+            session.setBaselineDone(true);
+        }
+        String type = currentTypeKey();
+        if ("FOLLOWUP".equals(type) || "AM".equals(type) || "MORNING".equals(type)
+                || "PM".equals(type) || "AFTERNOON".equals(type) || hasAnyFilledStar()) {
+            session.setBaselineDone(true);
+        }
+        if ("BASELINE".equals(type) && isTodayAllDone() && !needsFeedbackButton()) {
+            session.setBaselineDone(true);
+        }
+        if ("FOLLOWUP".equals(type) && isTodayAllDone() && !needsFeedbackButton()) {
+            session.setFollowupDone(true);
+            session.setBaselineDone(true);
+        }
+    }
+
     private void updateGreeting() {
         tvGreeting.setText(greetingForToday());
+    }
+
+    private void updatePhaseBadge() {
+        if (tvPhaseBadge == null) return;
+        String type = currentTypeKey();
+        if ("BASELINE".equals(type)) {
+            tvPhaseBadge.setVisibility(View.VISIBLE);
+            tvPhaseBadge.setText(R.string.phase_baseline);
+            tvPhaseBadge.setTextColor(ContextCompat.getColor(this, R.color.baseline_blue));
+            tvPhaseBadge.setBackgroundResource(R.drawable.bg_phase_badge_baseline);
+            tvPhaseBadge.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.bg_phase_dot_baseline, 0, 0, 0);
+            tvPhaseBadge.setCompoundDrawablePadding(dp(8));
+        } else if ("FOLLOWUP".equals(type)) {
+            tvPhaseBadge.setVisibility(View.VISIBLE);
+            tvPhaseBadge.setText(R.string.phase_followup);
+            tvPhaseBadge.setTextColor(ContextCompat.getColor(this, R.color.followup_pink));
+            tvPhaseBadge.setBackgroundResource(R.drawable.bg_phase_badge_followup);
+            tvPhaseBadge.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.bg_phase_dot_followup, 0, 0, 0);
+            tvPhaseBadge.setCompoundDrawablePadding(dp(8));
+        } else {
+            tvPhaseBadge.setVisibility(View.GONE);
+            tvPhaseBadge.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+        }
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
     private String greetingForToday() {
         if (needsFeedbackButton()) {
             return getString(R.string.dashboard_greeting_feedback);
         }
-        String type = today != null && today.currentType != null
-                ? today.currentType.trim().toUpperCase()
-                : "";
-        if ("AM".equals(type) || "MORNING".equals(type)) {
+        String type = currentTypeKey();
+        if ("BASELINE".equals(type) || "FOLLOWUP".equals(type)) {
+            return isTodayAllDone()
+                    ? getString(R.string.dashboard_greeting_mission_done)
+                    : getString(R.string.dashboard_greeting_mission_start);
+        }
+        boolean morningHour = MissionManager.mainSessionByHour() == MissionManager.Session.MORNING;
+        boolean amDone = isAmDoneToday();
+        boolean pmDone = isPmDoneToday();
+        if ("AM".equals(type) || "MORNING".equals(type) || (morningHour && type.isEmpty())) {
+            if (amDone || (isTodayAllDone() && morningHour)) {
+                return getString(R.string.dashboard_greeting_am_done);
+            }
             return getString(R.string.dashboard_greeting_am_start);
         }
-        if ("PM".equals(type) || "AFTERNOON".equals(type)) {
-            if (isMissedMorning()) {
-                return getString(R.string.dashboard_greeting_am_missed);
-            }
-            return getString(R.string.dashboard_greeting_pm_start);
-        }
-        if (isAmPmBothDone()) {
+        // 오후 시간대
+        if (amDone && pmDone) {
             return getString(R.string.dashboard_greeting_am_pm_done);
         }
-        return getString(R.string.dashboard_greeting);
+        if (pmDone) {
+            return getString(R.string.dashboard_greeting_pm_done);
+        }
+        if ("PM".equals(type) || "AFTERNOON".equals(type) || !morningHour) {
+            return getString(R.string.dashboard_greeting_pm_start);
+        }
+        return getString(R.string.dashboard_greeting_mission_start);
+    }
+
+    private String currentTypeKey() {
+        if (today == null || today.currentType == null) return "";
+        return today.currentType.trim().toUpperCase();
+    }
+
+    private boolean isAmDoneToday() {
+        if (participation != null && participation.today != null) {
+            return participation.today.amDone;
+        }
+        String type = currentTypeKey();
+        if ("AM".equals(type) || "MORNING".equals(type)) {
+            return isTodayAllDone();
+        }
+        if ("PM".equals(type) || "AFTERNOON".equals(type)) {
+            return !isMissedMorning();
+        }
+        return false;
+    }
+
+    private boolean isPmDoneToday() {
+        if (participation != null && participation.today != null) {
+            return participation.today.pmDone;
+        }
+        String type = currentTypeKey();
+        if ("PM".equals(type) || "AFTERNOON".equals(type)) {
+            return isTodayAllDone();
+        }
+        return type.isEmpty() && !MissionManager.mainSessionByHour().equals(MissionManager.Session.MORNING)
+                && isTodayAllDone();
     }
 
     private boolean isMissedMorning() {
@@ -689,19 +786,33 @@ public class DashboardActivity extends BaseSeniorActivity {
         return "AM".equals(missed) || "MORNING".equals(missed);
     }
 
-    /** 오전·오후를 모두 끝낸 뒤에만 완료 문구를 쓴다. 오전만 끝난 아침에는 쓰지 않는다. */
-    private boolean isAmPmBothDone() {
-        if (participation != null && participation.today != null
-                && participation.today.amDone && participation.today.pmDone) {
-            return true;
+    private boolean isBaselineDoneUi() {
+        if (today != null && today.baselineDone != null) {
+            return today.baselineDone;
         }
-        if (today == null) return false;
-        if (today.currentType != null && !today.currentType.trim().isEmpty()) {
-            return false;
+        if (session.isBaselineDone()) return true;
+        String type = currentTypeKey();
+        if ("BASELINE".equals(type)) return false;
+        return "FOLLOWUP".equals(type)
+                || "AM".equals(type) || "MORNING".equals(type)
+                || "PM".equals(type) || "AFTERNOON".equals(type)
+                || hasAnyFilledStar()
+                || participatedDays() > 0;
+    }
+
+    private boolean isFollowupDoneUi() {
+        if (today != null && today.followupDone != null) {
+            return today.followupDone;
         }
-        return participatedDays() > 0
-                && MissionManager.mainSessionByHour() == MissionManager.Session.AFTERNOON
-                && isTodayAllDone();
+        return session.isFollowupDone();
+    }
+
+    private boolean hasAnyFilledStar() {
+        if (today == null || today.stars == null) return false;
+        for (Integer v : today.stars) {
+            if (v != null && v > 1) return true;
+        }
+        return false;
     }
 
     private static MissionManager.Session mapCurrentType(String currentType) {
@@ -722,8 +833,13 @@ public class DashboardActivity extends BaseSeniorActivity {
     private void renderStars() {
         starRow.removeAllViews();
         float d = getResources().getDisplayMetrics().density;
-        int size = (int) (40 * d);
-        int pad = (int) (3 * d);
+        int size = (int) (36 * d);
+        int circle = (int) (22 * d);
+        int pad = (int) (2 * d);
+        int gap = (int) (6 * d);
+
+        starRow.addView(progressCircleView(circle, gap, isBaselineDoneUi(), true));
+
         int[] states = starStates();
         for (int i = 0; i < states.length; i++) {
             ImageView iv = new ImageView(this);
@@ -751,6 +867,24 @@ public class DashboardActivity extends BaseSeniorActivity {
             }
             starRow.addView(iv);
         }
+
+        starRow.addView(progressCircleView(circle, gap, isFollowupDoneUi(), false));
+    }
+
+    private View progressCircleView(int size, int sideGap, boolean done, boolean baseline) {
+        View v = new View(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+        lp.setMargins(sideGap, 0, sideGap, 0);
+        lp.gravity = android.view.Gravity.CENTER_VERTICAL;
+        v.setLayoutParams(lp);
+        if (done) {
+            v.setBackgroundResource(baseline
+                    ? R.drawable.bg_progress_circle_baseline
+                    : R.drawable.bg_progress_circle_followup);
+        } else {
+            v.setBackgroundResource(R.drawable.bg_progress_circle_empty);
+        }
+        return v;
     }
 
     /**

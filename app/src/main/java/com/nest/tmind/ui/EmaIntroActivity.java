@@ -40,26 +40,47 @@ public class EmaIntroActivity extends BaseSeniorActivity {
         }
         int count = EmaQuestionBank.itemsFor(sessionType).length;
 
-        int bodyRes;
-        switch (sessionType) {
-            case AFTERNOON:
-                bodyRes = R.string.ema_intro_body_afternoon;
-                break;
-            case EVENT:
-                bodyRes = R.string.ema_intro_body_extra;
-                break;
-            default:
-                bodyRes = R.string.ema_intro_body_morning;
-                break;
-        }
+        int bodyRes = sessionType == EmaQuestionBank.SessionType.EVENT
+                ? R.string.ema_intro_body_extra
+                : R.string.ema_intro_body;
 
         TextView tvIntro = findViewById(R.id.tvIntro);
         tvIntro.setText(buildHighlightedIntro(getString(bodyRes, count), count));
+        bindPhaseBadge();
         setupTtsFromViews(R.id.btnTts, R.id.tvLead, R.id.tvIntro);
 
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
         btnStart = findViewById(R.id.btnStart);
         btnStart.setOnClickListener(v -> loadServerQuestionsAndStart());
+    }
+
+    private void bindPhaseBadge() {
+        TextView badge = findViewById(R.id.tvPhaseBadge);
+        TextView tag = findViewById(R.id.tvIntroTag);
+        int pad = Math.round(8 * getResources().getDisplayMetrics().density);
+        if (sessionType == EmaQuestionBank.SessionType.BASELINE) {
+            badge.setVisibility(View.VISIBLE);
+            badge.setText(R.string.phase_baseline);
+            badge.setTextColor(ContextCompat.getColor(this, R.color.baseline_blue));
+            badge.setBackgroundResource(R.drawable.bg_phase_badge_baseline);
+            badge.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.bg_phase_dot_baseline, 0, 0, 0);
+            badge.setCompoundDrawablePadding(pad);
+            tag.setVisibility(View.GONE);
+        } else if (sessionType == EmaQuestionBank.SessionType.FOLLOWUP) {
+            badge.setVisibility(View.VISIBLE);
+            badge.setText(R.string.phase_followup);
+            badge.setTextColor(ContextCompat.getColor(this, R.color.followup_pink));
+            badge.setBackgroundResource(R.drawable.bg_phase_badge_followup);
+            badge.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.bg_phase_dot_followup, 0, 0, 0);
+            badge.setCompoundDrawablePadding(pad);
+            tag.setVisibility(View.GONE);
+        } else {
+            badge.setVisibility(View.GONE);
+            badge.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+            tag.setVisibility(View.VISIBLE);
+        }
     }
 
     /** VALID HRV 가 끝난 세션에서만 문항을 받는다. INVALID 는 재측정 대상. */

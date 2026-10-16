@@ -40,6 +40,8 @@ public class SessionManager {
     private static final String KEY_EMA_Q_CACHE_SID = "ema_questions_cache_session_id";
     private static final String KEY_HRV_MEASURED_AT = "hrv_measured_at";
     private static final String KEY_HRV_MEASURED_AT_SID = "hrv_measured_at_session_id";
+    private static final String KEY_BASELINE_DONE = "study_baseline_done";
+    private static final String KEY_FOLLOWUP_DONE = "study_followup_done";
     /** 피드백은 예측이 먼저 저장된 세션에서만 받아준다(E00702). */
     public void setPredictionSaved(long sessionId) {
         if (sessionId <= 0) {
@@ -343,6 +345,8 @@ public class SessionManager {
                 .remove(KEY_REFRESH_TOKEN)
                 .remove(KEY_MAIN_SESSION_ID)
                 .remove(KEY_EVENT_SESSION_ID)
+                .remove(KEY_BASELINE_DONE)
+                .remove(KEY_FOLLOWUP_DONE)
                 .commit();
     }
 
@@ -388,6 +392,22 @@ public class SessionManager {
 
     public boolean isRemoteEventAvailable() {
         return sp.getBoolean(KEY_EVENT_AVAILABLE_REMOTE, false);
+    }
+
+    public void setBaselineDone(boolean done) {
+        sp.edit().putBoolean(KEY_BASELINE_DONE, done).apply();
+    }
+
+    public boolean isBaselineDone() {
+        return sp.getBoolean(KEY_BASELINE_DONE, false);
+    }
+
+    public void setFollowupDone(boolean done) {
+        sp.edit().putBoolean(KEY_FOLLOWUP_DONE, done).apply();
+    }
+
+    public boolean isFollowupDone() {
+        return sp.getBoolean(KEY_FOLLOWUP_DONE, false);
     }
 
     /** VALID / INVALID / ""(미수행). */
