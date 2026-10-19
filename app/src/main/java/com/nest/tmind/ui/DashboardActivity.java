@@ -146,6 +146,10 @@ public class DashboardActivity extends BaseSeniorActivity {
             public void onError(String message) {
             }
         });
+        // logout() 안에서도 비우지만, 화면 전환 전에 홈 캐시를 즉시 끊는다.
+        MemberApiManager.clearAccountLocalState(this);
+        today = null;
+        participation = null;
         session.logoutForNewParticipant();
         Intent i = new Intent(this, LoginActivity.class);
         if (forceRegister) {

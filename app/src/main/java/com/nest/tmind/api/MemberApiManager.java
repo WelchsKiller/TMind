@@ -11,8 +11,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.reflect.TypeToken;
 import com.nest.tmind.ecg.LastEcgResult;
+import com.nest.tmind.ecg.MeasureSessionStats;
 import com.nest.tmind.ui.LoginActivity;
 import com.nest.tmind.util.EcgUploadCrypto;
+import com.nest.tmind.util.HistoryStore;
 import com.nest.tmind.util.InterventionClassifier;
 import com.nest.tmind.util.MissionManager;
 import com.nest.tmind.util.SessionManager;
@@ -60,6 +62,22 @@ public final class MemberApiManager {
         return lastStartSession;
     }
 
+    /**
+     * 로그아웃·계정 전환 시 이전 참여자 메모리/로컬 캐시를 비운다.
+     * lastToday 를 남기면 새 계정 홈에 이전 별이 잠깐·계속 그려진다.
+     */
+    public static void clearAccountLocalState(Context context) {
+        lastToday = null;
+        lastStartSession = null;
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        MissionManager.clearAll(app);
+        HistoryStore.clearAll(app);
+        LastEcgResult.clearCurrent(app);
+        MeasureSessionStats.reset();
+        MemberApiClient.resetClient();
+    }
+
     /** 심박·설문·일기 저장 성공 후, 그 시점의 /today 로 eventAvailable 등을 다시 받는다. */
     public static void refreshTodayAfterSave(Context context) {
         if (context == null) return;
@@ -95,6 +113,8 @@ public final class MemberApiManager {
                             return;
                         }
                         SessionManager session = new SessionManager(context);
+                        // 이전 참여자 /today·별 캐시가 새 계정에 섞이지 않게 한다.
+                        clearAccountLocalState(context);
                         session.setTokens(pair.accessToken, pair.refreshToken);
                         Log.i(TAG, "login ok, tokens saved");
                         callback.onSuccess(pair);
@@ -110,9 +130,11 @@ public final class MemberApiManager {
     public static void logout(Context context, ResultCallback<Void> callback) {
         SessionManager session = new SessionManager(context);
         String refresh = session.getRefreshToken();
+        clearAccountLocalState(context);
         if (refresh == null || refresh.isEmpty()) {
             session.clearTokens();
-            callback.onSuccess(null);
+            session.clearAllCurrentSessions();
+            if (callback != null) callback.onSuccess(null);
             return;
         }
         MemberApiClient.service(context).deleteFcmToken().enqueue(new EmptyCallback());
@@ -122,14 +144,14 @@ public final class MemberApiManager {
                     public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
                         session.clearTokens();
                         session.clearAllCurrentSessions();
-                        callback.onSuccess(null);
+                        if (callback != null) callback.onSuccess(null);
                     }
 
                     @Override
                     public void onFailure(Call<ResponseBody> call, Throwable t) {
                         session.clearTokens();
                         session.clearAllCurrentSessions();
-                        callback.onSuccess(null);
+                        if (callback != null) callback.onSuccess(null);
                     }
                 });
     }
@@ -1270,6 +1292,7 @@ public final class MemberApiManager {
      * @return always true (호출부에서 early-return 용)
      */
     public static boolean forceRelogin(Context context, String message) {
+        clearAccountLocalState(context);
         SessionManager session = new SessionManager(context);
         session.clearAuthForRelogin();
         final String msg = (message == null || message.isEmpty())

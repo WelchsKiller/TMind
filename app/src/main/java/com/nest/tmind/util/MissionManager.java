@@ -40,6 +40,16 @@ public class MissionManager {
         syncMainSessionByHour();
     }
 
+    /** 계정 전환 시 이전 참여자 미션·추가측정 로컬 상태를 전부 지운다. */
+    public static void clearAll(Context ctx) {
+        if (ctx == null) return;
+        ctx.getApplicationContext()
+                .getSharedPreferences(PREF, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply();
+    }
+
     /** 메인 미션용: 오전/오후만 (12시 기준). 추가는 별도. */
     public static Session mainSessionByHour() {
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);

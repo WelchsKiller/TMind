@@ -34,8 +34,10 @@ public class LoginActivity extends BaseSeniorActivity {
             return;
         }
         if (forceLogin) {
+            MemberApiManager.clearAccountLocalState(this);
             session.logoutForNewParticipant();
         } else if (!session.hasAccessToken()) {
+            MemberApiManager.clearAccountLocalState(this);
             session.clearTokens();
         }
 

@@ -23,6 +23,16 @@ public final class HistoryStore {
     private HistoryStore() {
     }
 
+    /** 계정 전환 시 이전 참여자 설문·분석 이력을 비운다. */
+    public static void clearAll(Context ctx) {
+        if (ctx == null) return;
+        ctx.getApplicationContext()
+                .getSharedPreferences(PREF, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply();
+    }
+
     public static void addEma(Context ctx, String sessionType, JSONObject answers) {
         try {
             JSONObject row = new JSONObject();
