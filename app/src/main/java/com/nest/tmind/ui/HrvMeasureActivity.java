@@ -379,8 +379,10 @@ public class HrvMeasureActivity extends BaseSeniorActivity
             LastEcgResult.clearCurrent(this);
         } else if (analyzed != null && analyzed.valid && isHumanHrv(analyzed.hrvMs)) {
             Log.i("HrvMeasure", "measure finished ok hr=" + analyzed.hrBpm
-                    + " hrv=" + analyzed.hrvMs + " ms");
+                    + " hrv=" + analyzed.hrvMs + " ms (wave)");
         } else {
+            // 파형 분석이 비거나 비정상이면, 기기 RR 로 SDNN 을 다시 구한다.
+            // 예전에는 측정 중 100ms 상한에 걸린 값을 평균해 결과가 항상 100 이었다.
             publishSessionAverage();
         }
         stopBleCompletely();
@@ -410,7 +412,10 @@ public class HrvMeasureActivity extends BaseSeniorActivity
     private void publishSessionAverage() {
         int hr = MeasureSessionStats.averageHr();
         int rr = MeasureSessionStats.averageRrMs();
-        int hrv = MeasureSessionStats.averageHrvMs();
+        int hrv = MeasureSessionStats.sdnnFromRr();
+        if (!isHumanHrv(hrv)) {
+            hrv = MeasureSessionStats.averageHrvMs();
+        }
         if (hr < 40 || hr > 180 || !isHumanHrv(hrv)) {
             Log.w("HrvMeasure", "session average unusable hr=" + hr + " hrv=" + hrv);
             LastEcgResult.clearCurrent(this);
@@ -419,7 +424,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         int hrvForScore = Math.max(20, Math.min(160, hrv));
         int stress = Math.round(((160f - hrvForScore) / 140f) * 100f);
         LastEcgResult.updateAndSave(this, null, 250, hr, hrv, rr, stress, System.currentTimeMillis());
-        Log.i("HrvMeasure", "session average hr=" + hr + " hrv=" + hrv + " ms");
+        Log.i("HrvMeasure", "session average hr=" + hr + " hrv=" + hrv + " ms (rr)");
     }
 
     private void saveMetrics() {

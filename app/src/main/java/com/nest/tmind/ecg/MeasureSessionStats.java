@@ -48,7 +48,8 @@ public final class MeasureSessionStats {
     }
 
     public static synchronized void addHrvMs(int hrvMs) {
-        if (hrvMs > 0 && hrvMs <= 300) {
+        // 안정 시 사람에게 나올 수 있는 구간만 모은다. 잡음으로 튀는 값은 버린다.
+        if (hrvMs > 0 && hrvMs <= 200) {
             hrvSamples.add(hrvMs);
         }
     }
@@ -62,7 +63,27 @@ public final class MeasureSessionStats {
     }
 
     public static synchronized int averageHrvMs() {
-        return averageOf(hrvSamples, 1, 300);
+        return averageOf(hrvSamples, 1, 200);
+    }
+
+    /**
+     * 측정 중 모인 RR 간격으로 SDNN 을 직접 구한다.
+     * 1초마다 잘린 SDNN 평균보다 결과 화면 값으로 더 맞다.
+     */
+    public static synchronized int sdnnFromRr() {
+        if (rrSamples.size() < 8) return 0;
+        double sum = 0;
+        for (int v : rrSamples) sum += v;
+        double mean = sum / rrSamples.size();
+        double var = 0;
+        for (int v : rrSamples) {
+            double d = v - mean;
+            var += d * d;
+        }
+        var /= (rrSamples.size() - 1);
+        int sdnn = (int) Math.round(Math.sqrt(var));
+        if (sdnn <= 0 || sdnn > 200) return 0;
+        return sdnn;
     }
 
     public static synchronized int sampleCount() {

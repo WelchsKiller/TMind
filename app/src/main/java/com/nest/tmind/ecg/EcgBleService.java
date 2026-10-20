@@ -1566,8 +1566,7 @@ public class EcgBleService extends Service {
 
         int sdnn = (int) Math.round(Math.sqrt(var));
         if (sdnn < 0) sdnn = 0;
-        if (sdnn > 100) sdnn = 100;
-
+        // 예전에 100 으로 잘라서, 측정 중 값이 상한에 붙으면 결과도 항상 100ms 가 됐다.
         return sdnn;
     }
 
