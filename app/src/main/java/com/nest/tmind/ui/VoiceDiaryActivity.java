@@ -34,6 +34,8 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
     public static final String EXTRA_EDIT_MODE = "edit_mode";
 
     private static final int MAX_SEC = 3 * 60;
+    /** 녹음 시작 후 이 시간이 지나야 종료 버튼을 누를 수 있다. */
+    private static final int MIN_STOP_SEC = 60;
 
     private MediaRecorder recorder;
     private File audioFile;
@@ -118,8 +120,12 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
 
     private void toggleRecording() {
         if (uploading) return;
-        if (recording) stopRecording();
-        else startRecording();
+        if (recording) {
+            if (elapsedSec < MIN_STOP_SEC) return;
+            stopRecording();
+        } else {
+            startRecording();
+        }
     }
 
     private void startRecording() {
@@ -139,6 +145,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
             recordedAtMs = System.currentTimeMillis();
             tvStatus.setText(R.string.recording_status);
             btnRecord.setImageResource(R.drawable.ic_stop);
+            setStopEnabled(false);
             handler.post(waveRunnable);
             handler.post(timerRunnable);
         } catch (Exception e) {
@@ -244,6 +251,7 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
             if (!recording) return;
             elapsedSec++;
             updateTimer();
+            if (elapsedSec >= MIN_STOP_SEC) setStopEnabled(true);
             if (elapsedSec >= MAX_SEC) stopRecording();
             else handler.postDelayed(this, 1000);
         }
@@ -261,6 +269,11 @@ public class VoiceDiaryActivity extends BaseSeniorActivity {
             handler.postDelayed(this, 80);
         }
     };
+
+    private void setStopEnabled(boolean enabled) {
+        btnRecord.setEnabled(enabled);
+        btnRecord.setAlpha(enabled ? 1f : 0.4f);
+    }
 
     private void updateTimer() {
         int min = elapsedSec / 60;

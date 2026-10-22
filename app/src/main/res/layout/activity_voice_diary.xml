@@ -21,5 +21,5 @@
 
     <ImageButton android:id="@+id/btnRecord" android:layout_width="96dp" android:layout_height="96dp" android:layout_marginTop="32dp" android:background="@drawable/bg_record_btn" android:contentDescription="녹음" android:src="@drawable/ic_mic" android:scaleType="center" />
 
-    <TextView android:id="@+id/tvStatus" style="@style/SeniorBody" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center" android:text="@string/recording_idle" />
+    <TextView android:id="@+id/tvStatus" style="@style/SeniorBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center" android:lineSpacingExtra="4dp" android:text="@string/recording_idle" />
 </LinearLayout>

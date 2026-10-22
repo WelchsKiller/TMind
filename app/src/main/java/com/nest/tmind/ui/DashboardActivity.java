@@ -446,13 +446,15 @@ public class DashboardActivity extends BaseSeniorActivity {
         cardAdditional.setEnabled(active);
         cardAdditional.setClickable(active);
         cardAdditional.setAlpha(active ? 1f : 0.45f);
-        String guide = today != null ? today.eventGuideText : null;
-        if (guide != null && !guide.trim().isEmpty()) {
-            tvAdditionalSub.setText(guide.trim());
-        } else if (active) {
-            tvAdditionalSub.setText(R.string.additional_measure_sub);
+        if (active) {
+            String guide = today != null ? today.eventGuideText : null;
+            if (guide != null && !guide.trim().isEmpty()) {
+                tvAdditionalSub.setText(guide.trim());
+            } else {
+                tvAdditionalSub.setText(R.string.additional_measure_sub);
+            }
         } else {
-            tvAdditionalSub.setText(additionalUnavailableMessage());
+            tvAdditionalSub.setText(R.string.additional_measure_need_mission);
         }
         if (active) {
             cardAdditional.setBackgroundResource(R.drawable.bg_btn_outline);
@@ -892,8 +894,8 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     /**
-     * 오전=왼쪽, 오후=오른쪽, 둘 다=가득.
-     * 추가 측정(event)이 있으면 골드 링. AM/PM 구분은 participation days 를 우선한다.
+     * /today stars 7칸만 그린다. 1=빈, 2=한쪽, 3=한쪽+효과, 4=가득, 5=가득+효과.
+     * participation 날짜로 다시 그리면 서버 칸보다 한 칸 밀린다.
      */
     private int[] starStates() {
         int[] row = new int[7];
@@ -905,7 +907,6 @@ public class DashboardActivity extends BaseSeniorActivity {
                 row[i] = starStateFromServer(v != null ? v : 1);
             }
         }
-        applyStarSidesFromParticipation(row);
         logStarMapping(row);
         return row;
     }
@@ -940,73 +941,7 @@ public class DashboardActivity extends BaseSeniorActivity {
         return "빈";
     }
 
-    private void applyStarSidesFromParticipation(int[] row) {
-        if (participation == null) return;
-        if (participation.period != null && participation.period.days != null) {
-            int n = Math.min(7, participation.period.days.size());
-            for (int i = 0; i < n; i++) {
-                ApiModels.DayStatus day = participation.period.days.get(i);
-                if (day == null) continue;
-                row[i] = starStateFromAmPm(day.amDone, day.pmDone, day.eventDone, serverStarAt(i));
-            }
-        }
-        if (participation.today != null) {
-            int idx = todayStarIndex();
-            if (idx >= 0 && idx < 7) {
-                boolean extra = participation.today.eventCount > 0;
-                row[idx] = starStateFromAmPm(participation.today.amDone,
-                        participation.today.pmDone, extra, serverStarAt(idx));
-            }
-        }
-    }
-
-    private int todayStarIndex() {
-        String date = today != null && today.serverDate != null ? today.serverDate.trim() : "";
-        if (!date.isEmpty() && participation != null && participation.period != null
-                && participation.period.days != null) {
-            for (int i = 0; i < Math.min(7, participation.period.days.size()); i++) {
-                ApiModels.DayStatus day = participation.period.days.get(i);
-                if (day != null && day.date != null && date.equals(day.date.trim())) {
-                    return i;
-                }
-            }
-        }
-        if (today != null && today.stars != null) {
-            int last = -1;
-            int n = Math.min(7, today.stars.size());
-            for (int i = 0; i < n; i++) {
-                Integer v = today.stars.get(i);
-                if (v != null && v > 1) last = i;
-            }
-            if (last >= 0) return last;
-        }
-        return -1;
-    }
-
-    private int serverStarAt(int index) {
-        if (today == null || today.stars == null || index < 0 || index >= today.stars.size()) {
-            return 1;
-        }
-        Integer v = today.stars.get(index);
-        return v != null ? v : 1;
-    }
-
-    private static int starStateFromAmPm(boolean amDone, boolean pmDone, boolean extra,
-                                         int serverStar) {
-        if (!extra) extra = serverStar == 3 || serverStar == 5;
-        if (amDone && pmDone) {
-            return extra ? MissionManager.STAR_BONUS : MissionManager.STAR_FULL;
-        }
-        if (amDone) {
-            return extra ? MissionManager.STAR_HALF_BONUS : MissionManager.STAR_HALF;
-        }
-        if (pmDone) {
-            return extra ? MissionManager.STAR_HALF_RIGHT_BONUS : MissionManager.STAR_HALF_RIGHT;
-        }
-        return MissionManager.STAR_EMPTY;
-    }
-
-    /** days 가 없을 때 /today stars 폴백. 2는 오전/오후 구분이 없어 왼쪽으로 둔다. */
+    /** 1=빈, 2=한쪽, 3=한쪽+효과, 4=가득, 5=가득+효과. */
     private static int starStateFromServer(int serverStar) {
         switch (serverStar) {
             case 2:

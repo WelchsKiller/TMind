@@ -65,7 +65,8 @@
     <string name="feedback_resume_sub">예측 결과를 확인하고 맞춰 주세요</string>
     <string name="dashboard_greeting_feedback">마음 결과를 확인하고 맞춰 주세요.</string>
     <string name="additional_measure_title">추가 측정</string>
-    <string name="additional_measure_sub">심박변이도·마음상태·마음일기를 추가로 진행할 수 있어요.</string>
+    <string name="additional_measure_sub">추가 측정을 진행할 수 있어요.</string>
+    <string name="additional_measure_need_mission">미션 완료 후 추가 측정이 가능해요</string>
     <string name="additional_measure_sub_count">추가 측정 %1$d/%2$d회 · 심박변이도 → 마음상태 → 마음일기</string>
     <string name="additional_measure_locked">오늘 오전 또는 오후 세션을 완료한 뒤에 이용할 수 있어요.</string>
     <string name="additional_measure_need_hrv">심박변이도 측정을 먼저 완료해 주세요</string>
@@ -163,7 +164,7 @@
     <string name="diary_title">마음일기</string>
     <string name="diary_instruction">오늘 하루에 대해 편하게 말씀해 주세요</string>
     <string name="recording_idle">가운데 마이크 버튼을 눌러 녹음을 시작하세요</string>
-    <string name="recording_status">녹음 중입니다. 다 말씀하시면 가운데를 다시 누르세요</string>
+    <string name="recording_status">2~3분 정도 녹음해 주세요.\n다 말씀하시면 가운데를 다시 누르세요.</string>
     <string name="recording_done">녹음이 완료되었습니다</string>
 
     <!-- Analysis -->
