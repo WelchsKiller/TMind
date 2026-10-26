@@ -26,6 +26,7 @@ public class EmaIntroActivity extends BaseSeniorActivity {
 
     private EmaQuestionBank.SessionType sessionType;
     private View btnStart;
+    private TextView tvIntro;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,20 +39,58 @@ public class EmaIntroActivity extends BaseSeniorActivity {
         } else {
             sessionType = EmaQuestionBank.dailyTypeNow();
         }
-        int count = EmaQuestionBank.itemsFor(sessionType).length;
-
-        int bodyRes = sessionType == EmaQuestionBank.SessionType.EVENT
-                ? R.string.ema_intro_body_extra
-                : R.string.ema_intro_body;
-
-        TextView tvIntro = findViewById(R.id.tvIntro);
-        tvIntro.setText(buildHighlightedIntro(getString(bodyRes, count), count));
+        tvIntro = findViewById(R.id.tvIntro);
+        bindIntro(resolveQuestionCount());
+        prefetchQuestionCount();
         bindPhaseBadge();
         setupTtsFromViews(R.id.btnTts, R.id.tvLead, R.id.tvIntro);
 
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
         btnStart = findViewById(R.id.btnStart);
         btnStart.setOnClickListener(v -> loadServerQuestionsAndStart());
+    }
+
+    private boolean isEventSession() {
+        return sessionType == EmaQuestionBank.SessionType.EVENT
+                || getIntent().getBooleanExtra(AnalysisResultActivity.EXTRA_ADDITIONAL, false)
+                || new MissionManager(this).isAdditionalMeasureMode();
+    }
+
+    private int resolveQuestionCount() {
+        java.util.List<ApiModels.QuestionResponse> cached =
+                MemberApiManager.loadCachedEmaQuestions(this, isEventSession());
+        if (cached != null && !cached.isEmpty()) {
+            return cached.size();
+        }
+        return EmaQuestionBank.itemsFor(sessionType).length;
+    }
+
+    private void prefetchQuestionCount() {
+        boolean event = isEventSession();
+        SessionManager sm = new SessionManager(this);
+        if (sm.getCurrentSessionId(event) <= 0) return;
+        MemberApiManager.fetchEmaQuestions(this, event,
+                new MemberApiManager.ResultCallback<java.util.List<ApiModels.QuestionResponse>>() {
+                    @Override
+                    public void onSuccess(java.util.List<ApiModels.QuestionResponse> data) {
+                        if (data == null || data.isEmpty()) return;
+                        runOnUiThread(() -> {
+                            bindIntro(data.size());
+                            setupTtsFromViews(R.id.btnTts, R.id.tvLead, R.id.tvIntro);
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                    }
+                });
+    }
+
+    private void bindIntro(int count) {
+        int bodyRes = sessionType == EmaQuestionBank.SessionType.EVENT
+                ? R.string.ema_intro_body_extra
+                : R.string.ema_intro_body;
+        tvIntro.setText(buildHighlightedIntro(getString(bodyRes, count), count));
     }
 
     private void bindPhaseBadge() {

@@ -31,27 +31,25 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
         TextView tvHrv = findViewById(R.id.tvHrv);
         RussellCircumplexView russell = findViewById(R.id.russellView);
 
+        LastEcgResult.loadFromPrefs(this);
         RussellEmotionCalculator.Point point = buildPredictedPoint();
         if (point != null) {
             russell.setPoint(point.valence, point.arousal);
         }
 
-        int bpm = 0;
-        int hrv = 0;
-        if (LastEcgResult.hasValid()) {
-            bpm = LastEcgResult.lastHrBpm;
-            hrv = LastEcgResult.lastHrvMs;
-            if (bpm > 0 && (bpm < 40 || bpm > 180)) {
-                tvBpm.setText("-- 회/분");
-            } else if (bpm > 0) {
-                tvBpm.setText(getString(R.string.bpm_unit_format, bpm));
-            } else {
-                tvBpm.setText("-- 회/분");
-            }
-            tvHrv.setText(hrv > 0 ? getString(R.string.hrv_unit_format, hrv) : "-- ms");
+        int[] metrics = resolveHrvMetrics();
+        int bpm = metrics[0];
+        int hrv = metrics[1];
+        if (bpm >= 40 && bpm <= 180) {
+            tvBpm.setText(getString(R.string.bpm_unit_format, bpm));
+        } else if (bpm > 0) {
+            tvBpm.setText(getString(R.string.bpm_unit_format, bpm));
         } else {
             tvBpm.setText("-- 회/분");
-            tvHrv.setText("-- ms");
+        }
+        tvHrv.setText(hrv > 0 ? getString(R.string.hrv_unit_format, hrv) : "-- ms");
+        if (bpm > 0 || hrv > 0) {
+            new SessionManager(this).setLastHrvMetrics(bpm, hrv);
         }
 
         if (savedInstanceState == null && point != null && !isReentry()) {
@@ -90,6 +88,25 @@ public class AnalysisResultActivity extends BaseSeniorActivity {
             finish();
         });
         btnUnknown.setOnClickListener(v -> goFeedback("unknown"));
+    }
+
+    /** 메모리 → prefs → 세션 캐시 → 최근 분석 기록 순으로 심박·HRV를 찾는다. */
+    private int[] resolveHrvMetrics() {
+        int bpm = LastEcgResult.lastHrBpm;
+        int hrv = LastEcgResult.lastHrvMs;
+        if (bpm <= 0 && hrv <= 0) {
+            SessionManager sm = new SessionManager(this);
+            bpm = sm.getLastHrBpm();
+            hrv = sm.getLastHrvMs();
+        }
+        if (bpm <= 0 && hrv <= 0) {
+            org.json.JSONObject latest = HistoryStore.latestAnalysis(this);
+            if (latest != null) {
+                bpm = latest.optInt("bpm", 0);
+                hrv = latest.optInt("hrvMs", 0);
+            }
+        }
+        return new int[]{bpm, hrv};
     }
 
     private RussellEmotionCalculator.Point buildPredictedPoint() {

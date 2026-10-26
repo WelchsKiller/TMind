@@ -17,6 +17,7 @@ public class LastEcgResult {
 
     private static final String PREF_NAME = "last_ecg_result";
     private static final String KEY_LAST = "last";
+    private static final String KEY_LAST_METRICS = "last_metrics";
     private static final String KEY_HISTORY = "history";
 
     // ────────────── 마지막 측정 결과 (UI에서 바로 씀) ──────────────
@@ -84,6 +85,7 @@ public class LastEcgResult {
             ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                     .edit()
                     .remove(KEY_LAST)
+                    .remove(KEY_LAST_METRICS)
                     .apply();
         }
     }
@@ -110,7 +112,7 @@ public class LastEcgResult {
         SharedPreferences sp = ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         String js = readPref(sp, KEY_LAST);
         if (js == null) {
-            if (!keepMemory) {
+            if (!keepMemory && !loadMetricsOnly(sp)) {
                 lastSpike = null;
                 lastFs = 0;
                 lastHrBpm = 0;
@@ -143,10 +145,13 @@ public class LastEcgResult {
             } else {
                 lastSpike = null;
             }
+            if (lastHrBpm <= 0 && lastHrvMs <= 0) {
+                loadMetricsOnly(sp);
+            }
 
         } catch (JSONException e) {
-            // prefs 파싱 실패 시 메모리 유효값 유지
-            if (!keepMemory) {
+            // prefs 파싱 실패 시 수치만 복원하고, 그것도 없으면 메모리 유효값 유지
+            if (!keepMemory && !loadMetricsOnly(sp)) {
                 lastSpike = null;
                 lastFs = 0;
                 lastHrBpm = 0;
@@ -156,6 +161,29 @@ public class LastEcgResult {
                 measuredAtMs = 0L;
                 measurementValid = false;
             }
+        }
+    }
+
+    /** 파형 JSON이 깨져도 심박·HRV 숫자는 따로 복원한다. */
+    private static boolean loadMetricsOnly(SharedPreferences sp) {
+        String js = readPref(sp, KEY_LAST_METRICS);
+        if (js == null) return false;
+        try {
+            JSONObject o = new JSONObject(js);
+            int hr = o.optInt("hr", 0);
+            int hrv = o.optInt("hrvMs", 0);
+            if (hr <= 0 && hrv <= 0) return false;
+            lastHrBpm = hr;
+            lastHrvMs = hrv;
+            lastRrMs = o.optInt("rrMs", lastRrMs);
+            lastStressScore = o.optInt("stress", lastStressScore);
+            measuredAtMs = o.optLong("timeMs", measuredAtMs);
+            lastFs = o.optInt("fs", lastFs);
+            measurementValid = o.optBoolean("valid",
+                    lastHrBpm >= 40 && lastHrBpm <= 180 && lastHrvMs > 0);
+            return true;
+        } catch (JSONException e) {
+            return false;
         }
     }
 
@@ -234,6 +262,22 @@ public class LastEcgResult {
         } catch (JSONException ignored) {
         }
 
+        JSONObject metrics = new JSONObject();
+        try {
+            metrics.put("fs", lastFs);
+            metrics.put("hr", lastHrBpm);
+            metrics.put("hrvMs", lastHrvMs);
+            metrics.put("rrMs", lastRrMs);
+            metrics.put("stress", lastStressScore);
+            metrics.put("timeMs", measuredAtMs);
+            metrics.put("valid", measurementValid);
+        } catch (JSONException ignored) {
+        }
+        // 수치는 작은 JSON으로 먼저 남기고, 파형은 실패해도 분석 화면에 값이 보이게 한다.
+        sp.edit().putString(KEY_LAST_METRICS, metrics.toString()).commit();
+        if (ctx != null && (lastHrBpm > 0 || lastHrvMs > 0)) {
+            new com.nest.tmind.util.SessionManager(ctx).setLastHrvMetrics(lastHrBpm, lastHrvMs);
+        }
         // 측정 결과(파형 포함)는 평문 저장 — 암호문 복호화 실패 시 결과 화면이 비는 문제 방지
         sp.edit()
                 .putString(KEY_LAST, last.toString())

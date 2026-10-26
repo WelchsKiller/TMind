@@ -43,6 +43,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
     private long[] remoteQuestionIds;
     private String[] remotePrompts;
     private String[][] remoteOptionLabels;
+    private String[] remotePolarities;
     private int serverQuestionCount;
     private SessionManager session;
     private TextView tvQuestion, tvProgress;
@@ -80,6 +81,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
                     remoteQuestionIds = restoredIds;
                 }
                 remotePrompts = savedInstanceState.getStringArray("remotePrompts");
+                remotePolarities = savedInstanceState.getStringArray("remotePolarities");
             }
             if (!hasRemoteQuestionIds()) {
                 java.util.List<ApiModels.QuestionResponse> remote = loadRemoteQuestions();
@@ -91,6 +93,12 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
                 applyRemoteQuestions(remote);
             } else if (serverQuestionCount <= 0 && remoteQuestionIds != null) {
                 serverQuestionCount = remoteQuestionIds.length;
+            }
+            if (hasRemoteQuestionIds() && remotePolarities == null) {
+                java.util.List<ApiModels.QuestionResponse> cachedPolarity = loadRemoteQuestions();
+                if (cachedPolarity != null && !cachedPolarity.isEmpty()) {
+                    applyRemoteQuestions(cachedPolarity);
+                }
             }
         }
 
@@ -151,6 +159,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         outState.putInt("serverQuestionCount", serverQuestionCount);
         outState.putLongArray("remoteQuestionIds", remoteQuestionIds);
         outState.putStringArray("remotePrompts", remotePrompts);
+        outState.putStringArray("remotePolarities", remotePolarities);
     }
 
     @Override
@@ -164,6 +173,10 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         String[] prompts = savedInstanceState.getStringArray("remotePrompts");
         if (prompts != null && prompts.length > 0) {
             remotePrompts = prompts;
+        }
+        String[] polarities = savedInstanceState.getStringArray("remotePolarities");
+        if (polarities != null && polarities.length > 0) {
+            remotePolarities = polarities;
         }
     }
 
@@ -187,10 +200,12 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         remoteQuestionIds = new long[serverQuestionCount];
         remotePrompts = new String[serverQuestionCount];
         remoteOptionLabels = new String[serverQuestionCount][];
+        remotePolarities = new String[serverQuestionCount];
         for (int i = 0; i < serverQuestionCount; i++) {
             ApiModels.QuestionResponse q = data.get(i);
             remoteQuestionIds[i] = MemberApiManager.resolveQuestionId(q);
             remotePrompts[i] = q.text;
+            remotePolarities[i] = q.polarity;
             if (q.options != null && q.options.size() >= 5) {
                 remoteOptionLabels[i] = q.options.toArray(new String[0]);
             }
@@ -253,16 +268,24 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         return EmaQuestionBank.itemsFor(sessionType)[0].scaleLabels;
     }
 
+    private String currentPolarity() {
+        if (remotePolarities != null && currentIndex < remotePolarities.length) {
+            return remotePolarities[currentIndex];
+        }
+        return null;
+    }
+
     private void bindOptionsForCurrent() {
         EmaQuestionBank.Item item = currentIndex < items.length ? items[currentIndex] : null;
         String[] labels = currentLabels();
+        String polarity = currentPolarity();
         for (int i = 0; i < optionViews.length; i++) {
             TextView label = optionViews[i].findViewById(R.id.optLabel);
             ImageView emoji = optionViews[i].findViewById(R.id.optEmoji);
             View radio = optionViews[i].findViewById(R.id.optRadio);
             if (label != null) label.setText(labels[i]);
             if (emoji != null) {
-                emoji.setImageResource(EmaQuestionBank.drawableResFor(item, i, labels));
+                emoji.setImageResource(EmaQuestionBank.drawableResFor(item, i, labels, polarity));
                 emoji.setBackground(null);
             }
             if (radio != null) {

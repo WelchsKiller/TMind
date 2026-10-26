@@ -736,6 +736,9 @@ public final class MemberApiManager {
         boolean remeasure = prev > 0 && prev != measuredAt;
         session.setRemoteHrvStatus(measurementValid ? "VALID" : "INVALID");
         session.setLastHrvMeasuredAt(sessionId, measuredAt);
+        if (LastEcgResult.lastHrBpm > 0 || LastEcgResult.lastHrvMs > 0) {
+            session.setLastHrvMetrics(LastEcgResult.lastHrBpm, LastEcgResult.lastHrvMs);
+        }
         ApiModels.TodayResponse cached = lastToday;
         if (cached != null) {
             cached.hrvDone = true;

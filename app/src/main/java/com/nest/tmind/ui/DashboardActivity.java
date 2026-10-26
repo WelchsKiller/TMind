@@ -895,7 +895,7 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     /**
      * /today stars 7칸만 그린다. 1=빈, 2=한쪽, 3=한쪽+효과, 4=가득, 5=가득+효과.
-     * participation 날짜로 다시 그리면 서버 칸보다 한 칸 밀린다.
+     * 칸 위치는 서버 순서를 유지하고, 한쪽만 채운 날은 AM=왼쪽 / PM=오른쪽으로 맞춘다.
      */
     private int[] starStates() {
         int[] row = new int[7];
@@ -907,8 +907,109 @@ public class DashboardActivity extends BaseSeniorActivity {
                 row[i] = starStateFromServer(v != null ? v : 1);
             }
         }
+        applyStarSidesFromParticipation(row);
         logStarMapping(row);
         return row;
+    }
+
+    /** 서버 칸을 밀지 않고, 날짜가 맞는 칸만 오전/오후 쪽으로 뒤집는다. */
+    private void applyStarSidesFromParticipation(int[] row) {
+        if (row == null) return;
+        if (participation != null && participation.period != null
+                && participation.period.days != null
+                && participation.period.startDate != null) {
+            for (ApiModels.DayStatus day : participation.period.days) {
+                if (day == null || day.date == null) continue;
+                int idx = daysBetween(participation.period.startDate, day.date);
+                if (idx < 0 || idx >= row.length) continue;
+                boolean extra = day.eventDone
+                        || row[idx] == MissionManager.STAR_HALF_BONUS
+                        || row[idx] == MissionManager.STAR_HALF_RIGHT_BONUS
+                        || row[idx] == MissionManager.STAR_BONUS;
+                row[idx] = starStateFromAmPm(day.amDone, day.pmDone, extra, serverStarAt(idx));
+            }
+        }
+        int todayIdx = todayStarIndex();
+        if (todayIdx >= 0 && todayIdx < row.length) {
+            if (participation != null && participation.today != null) {
+                boolean extra = participation.today.eventCount > 0
+                        || row[todayIdx] == MissionManager.STAR_HALF_BONUS
+                        || row[todayIdx] == MissionManager.STAR_HALF_RIGHT_BONUS
+                        || row[todayIdx] == MissionManager.STAR_BONUS;
+                row[todayIdx] = starStateFromAmPm(
+                        participation.today.amDone,
+                        participation.today.pmDone,
+                        extra,
+                        serverStarAt(todayIdx));
+            } else {
+                applyTodayHalfSideFallback(row, todayIdx);
+            }
+        }
+    }
+
+    /** 참여 현황이 아직 없을 때: 오전 미실시 + 한쪽만 채워진 별이면 오른쪽(오후)으로 둔다. */
+    private void applyTodayHalfSideFallback(int[] row, int idx) {
+        int server = serverStarAt(idx);
+        if ((server == 2 || server == 3) && isMissedMorning()) {
+            row[idx] = server == 3
+                    ? MissionManager.STAR_HALF_RIGHT_BONUS
+                    : MissionManager.STAR_HALF_RIGHT;
+        }
+    }
+
+    private int todayStarIndex() {
+        if (today != null && today.serverDate != null
+                && participation != null && participation.period != null
+                && participation.period.startDate != null) {
+            int idx = daysBetween(participation.period.startDate, today.serverDate);
+            if (idx >= 0 && idx < 7) return idx;
+        }
+        if (today != null && today.stars != null) {
+            int last = -1;
+            int n = Math.min(7, today.stars.size());
+            for (int i = 0; i < n; i++) {
+                Integer v = today.stars.get(i);
+                if (v != null && v > 1) last = i;
+            }
+            if (last >= 0) return last;
+        }
+        return 0;
+    }
+
+    private int serverStarAt(int idx) {
+        if (today == null || today.stars == null || idx < 0 || idx >= today.stars.size()) {
+            return 1;
+        }
+        Integer v = today.stars.get(idx);
+        return v != null ? v : 1;
+    }
+
+    private static int starStateFromAmPm(boolean am, boolean pm, boolean extra, int serverStar) {
+        if (am && pm) {
+            return extra ? MissionManager.STAR_BONUS : MissionManager.STAR_FULL;
+        }
+        if (am) {
+            return extra ? MissionManager.STAR_HALF_BONUS : MissionManager.STAR_HALF;
+        }
+        if (pm) {
+            return extra ? MissionManager.STAR_HALF_RIGHT_BONUS : MissionManager.STAR_HALF_RIGHT;
+        }
+        return starStateFromServer(serverStar);
+    }
+
+    private static int daysBetween(String start, String end) {
+        if (start == null || end == null) return -1;
+        try {
+            java.text.SimpleDateFormat f =
+                    new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
+            f.setLenient(false);
+            java.util.Date a = f.parse(start.trim());
+            java.util.Date b = f.parse(end.trim());
+            if (a == null || b == null) return -1;
+            return (int) ((b.getTime() - a.getTime()) / (24L * 60L * 60L * 1000L));
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     private void logStarMapping(int[] row) {

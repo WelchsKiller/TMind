@@ -274,5 +274,7 @@ public final class ApiModels {
         public int orderNo;
         public String text;
         public List<String> options;
+        /** POSITIVE(긍정) / NEGATIVE(부정). 없으면 기존 표시를 유지한다. */
+        public String polarity;
     }
 }

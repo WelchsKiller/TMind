@@ -40,6 +40,8 @@ public class SessionManager {
     private static final String KEY_EMA_Q_CACHE_SID = "ema_questions_cache_session_id";
     private static final String KEY_HRV_MEASURED_AT = "hrv_measured_at";
     private static final String KEY_HRV_MEASURED_AT_SID = "hrv_measured_at_session_id";
+    private static final String KEY_LAST_HR_BPM = "last_hr_bpm";
+    private static final String KEY_LAST_HRV_MS = "last_hrv_ms";
     private static final String KEY_BASELINE_DONE = "study_baseline_done";
     private static final String KEY_FOLLOWUP_DONE = "study_followup_done";
     /** 피드백은 예측이 먼저 저장된 세션에서만 받아준다(E00702). */
@@ -443,6 +445,22 @@ public class SessionManager {
         if (sessionId <= 0) return 0L;
         if (sp.getLong(KEY_HRV_MEASURED_AT_SID, 0L) != sessionId) return 0L;
         return sp.getLong(KEY_HRV_MEASURED_AT, 0L);
+    }
+
+    public void setLastHrvMetrics(int hrBpm, int hrvMs) {
+        if (hrBpm <= 0 && hrvMs <= 0) return;
+        sp.edit()
+                .putInt(KEY_LAST_HR_BPM, hrBpm)
+                .putInt(KEY_LAST_HRV_MS, hrvMs)
+                .apply();
+    }
+
+    public int getLastHrBpm() {
+        return sp.getInt(KEY_LAST_HR_BPM, 0);
+    }
+
+    public int getLastHrvMs() {
+        return sp.getInt(KEY_LAST_HRV_MS, 0);
     }
 
     public void clearRemoteEmaDone() {

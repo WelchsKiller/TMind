@@ -117,21 +117,31 @@ public final class EmaQuestionBank {
     }
 
     /**
-     * 화면 위→아래 고정: 초록 웃음 → 연두 웃음 → 노랑 → 주황 찡그림 → 빨강.
+     * 화면 위→아래: NEGATIVE(기본)는 초록→빨강.
+     * POSITIVE만 이모지 순서를 뒤집어 맨 아래(매우 그렇다)가 초록 웃음이 되게 한다.
      */
     public static int drawableResFor(Item item, int displayIndex) {
-        return drawableResFor(item, displayIndex, null);
+        return drawableResFor(item, displayIndex, null, null);
     }
 
     public static int drawableResFor(Item item, int displayIndex, String[] labels) {
+        return drawableResFor(item, displayIndex, labels, null);
+    }
+
+    public static int drawableResFor(Item item, int displayIndex, String[] labels, String polarity) {
         if (displayIndex < 0 || displayIndex > 4) return R.drawable.emoji_3;
-        switch (displayIndex) {
+        int visual = isPositivePolarity(polarity) ? 4 - displayIndex : displayIndex;
+        switch (visual) {
             case 0: return R.drawable.emoji_5;
             case 1: return R.drawable.emoji_4;
             case 2: return R.drawable.emoji_3;
             case 3: return R.drawable.emoji_2;
             default: return R.drawable.emoji_1;
         }
+    }
+
+    public static boolean isPositivePolarity(String polarity) {
+        return polarity != null && "POSITIVE".equalsIgnoreCase(polarity.trim());
     }
 
     /** 1=낮음/전혀, 5=높음/매우. 선택지 표시 순서와 맞춰 계산한다. */
@@ -151,8 +161,13 @@ public final class EmaQuestionBank {
     }
 
     public static int colorFor(Item item, int displayIndex, String[] labels) {
+        return colorFor(item, displayIndex, labels, null);
+    }
+
+    public static int colorFor(Item item, int displayIndex, String[] labels, String polarity) {
         if (displayIndex < 0 || displayIndex > 4) return 0xFF757575;
-        return COLORS_GOOD_TO_BAD[displayIndex];
+        int visual = isPositivePolarity(polarity) ? 4 - displayIndex : displayIndex;
+        return COLORS_GOOD_TO_BAD[visual];
     }
 
     private static Item[] baseline() {

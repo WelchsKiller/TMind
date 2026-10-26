@@ -104,6 +104,12 @@ public final class HistoryStore {
         return toList(loadArray(ctx, KEY_ANALYSIS, KEY_ANALYSIS_LEGACY));
     }
 
+    /** 가장 최근 분석 기록. 일기 이후 결과 화면에서 심박·HRV 복원용. */
+    public static JSONObject latestAnalysis(Context ctx) {
+        List<JSONObject> all = loadAnalysis(ctx);
+        return all.isEmpty() ? null : all.get(0);
+    }
+
     public static List<JSONObject> loadDailyLatestAnalysis(Context ctx, int days) {
         List<JSONObject> all = loadAnalysis(ctx);
         List<JSONObject> out = new ArrayList<>();
