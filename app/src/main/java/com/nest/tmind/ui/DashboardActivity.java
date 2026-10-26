@@ -895,7 +895,9 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     /**
      * /today stars 7칸만 그린다. 1=빈, 2=한쪽, 3=한쪽+효과, 4=가득, 5=가득+효과.
-     * 칸 위치는 서버 순서를 유지하고, 한쪽만 채운 날은 AM=왼쪽 / PM=오른쪽으로 맞춘다.
+     * 어느 칸을 채울지는 서버 배열만 따른다. 참여 날짜로 칸을 다시 잡으면
+     * 베이스라인 날이 끼어 한 칸 밀린다.
+     * 한쪽만 채워진 칸(2, 3)은 오늘 오전/오후만 보고 왼쪽·오른쪽을 맞춘다.
      */
     private int[] starStates() {
         int[] row = new int[7];
@@ -907,73 +909,41 @@ public class DashboardActivity extends BaseSeniorActivity {
                 row[i] = starStateFromServer(v != null ? v : 1);
             }
         }
-        applyStarSidesFromParticipation(row);
+        applyTodayHalfStarSide(row);
         logStarMapping(row);
         return row;
     }
 
-    /** 서버 칸을 밀지 않고, 날짜가 맞는 칸만 오전/오후 쪽으로 뒤집는다. */
-    private void applyStarSidesFromParticipation(int[] row) {
-        if (row == null) return;
-        if (participation != null && participation.period != null
-                && participation.period.days != null
-                && participation.period.startDate != null) {
-            for (ApiModels.DayStatus day : participation.period.days) {
-                if (day == null || day.date == null) continue;
-                int idx = daysBetween(participation.period.startDate, day.date);
-                if (idx < 0 || idx >= row.length) continue;
-                boolean extra = day.eventDone
-                        || row[idx] == MissionManager.STAR_HALF_BONUS
-                        || row[idx] == MissionManager.STAR_HALF_RIGHT_BONUS
-                        || row[idx] == MissionManager.STAR_BONUS;
-                row[idx] = starStateFromAmPm(day.amDone, day.pmDone, extra, serverStarAt(idx));
-            }
+    /** 서버가 이미 한쪽만 준 칸만 AM=왼쪽 / PM=오른쪽으로 뒤집는다. 빈 칸은 채우지 않는다. */
+    private void applyTodayHalfStarSide(int[] row) {
+        if (row == null || today == null || today.stars == null) return;
+        Boolean pmOnly = isPmOnlyHalfStar();
+        if (pmOnly == null) return;
+        int n = Math.min(row.length, today.stars.size());
+        int lastHalf = -1;
+        for (int i = 0; i < n; i++) {
+            int server = serverStarAt(i);
+            if (server == 2 || server == 3) lastHalf = i;
         }
-        int todayIdx = todayStarIndex();
-        if (todayIdx >= 0 && todayIdx < row.length) {
-            if (participation != null && participation.today != null) {
-                boolean extra = participation.today.eventCount > 0
-                        || row[todayIdx] == MissionManager.STAR_HALF_BONUS
-                        || row[todayIdx] == MissionManager.STAR_HALF_RIGHT_BONUS
-                        || row[todayIdx] == MissionManager.STAR_BONUS;
-                row[todayIdx] = starStateFromAmPm(
-                        participation.today.amDone,
-                        participation.today.pmDone,
-                        extra,
-                        serverStarAt(todayIdx));
-            } else {
-                applyTodayHalfSideFallback(row, todayIdx);
-            }
-        }
+        if (lastHalf < 0) return;
+        boolean extra = serverStarAt(lastHalf) == 3;
+        row[lastHalf] = pmOnly
+                ? (extra ? MissionManager.STAR_HALF_RIGHT_BONUS : MissionManager.STAR_HALF_RIGHT)
+                : (extra ? MissionManager.STAR_HALF_BONUS : MissionManager.STAR_HALF);
     }
 
-    /** 참여 현황이 아직 없을 때: 오전 미실시 + 한쪽만 채워진 별이면 오른쪽(오후)으로 둔다. */
-    private void applyTodayHalfSideFallback(int[] row, int idx) {
-        int server = serverStarAt(idx);
-        if ((server == 2 || server == 3) && isMissedMorning()) {
-            row[idx] = server == 3
-                    ? MissionManager.STAR_HALF_RIGHT_BONUS
-                    : MissionManager.STAR_HALF_RIGHT;
+    /**
+     * 오늘 한쪽만 끝난 날이 오후인지. 오전만이면 false, 모르면 null(서버 기본 왼쪽 유지).
+     */
+    private Boolean isPmOnlyHalfStar() {
+        if (participation != null && participation.today != null) {
+            boolean am = participation.today.amDone;
+            boolean pm = participation.today.pmDone;
+            if (am && !pm) return false;
+            if (!am && pm) return true;
+            return null;
         }
-    }
-
-    private int todayStarIndex() {
-        if (today != null && today.serverDate != null
-                && participation != null && participation.period != null
-                && participation.period.startDate != null) {
-            int idx = daysBetween(participation.period.startDate, today.serverDate);
-            if (idx >= 0 && idx < 7) return idx;
-        }
-        if (today != null && today.stars != null) {
-            int last = -1;
-            int n = Math.min(7, today.stars.size());
-            for (int i = 0; i < n; i++) {
-                Integer v = today.stars.get(i);
-                if (v != null && v > 1) last = i;
-            }
-            if (last >= 0) return last;
-        }
-        return 0;
+        return isMissedMorning() ? true : null;
     }
 
     private int serverStarAt(int idx) {
@@ -982,34 +952,6 @@ public class DashboardActivity extends BaseSeniorActivity {
         }
         Integer v = today.stars.get(idx);
         return v != null ? v : 1;
-    }
-
-    private static int starStateFromAmPm(boolean am, boolean pm, boolean extra, int serverStar) {
-        if (am && pm) {
-            return extra ? MissionManager.STAR_BONUS : MissionManager.STAR_FULL;
-        }
-        if (am) {
-            return extra ? MissionManager.STAR_HALF_BONUS : MissionManager.STAR_HALF;
-        }
-        if (pm) {
-            return extra ? MissionManager.STAR_HALF_RIGHT_BONUS : MissionManager.STAR_HALF_RIGHT;
-        }
-        return starStateFromServer(serverStar);
-    }
-
-    private static int daysBetween(String start, String end) {
-        if (start == null || end == null) return -1;
-        try {
-            java.text.SimpleDateFormat f =
-                    new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
-            f.setLenient(false);
-            java.util.Date a = f.parse(start.trim());
-            java.util.Date b = f.parse(end.trim());
-            if (a == null || b == null) return -1;
-            return (int) ((b.getTime() - a.getTime()) / (24L * 60L * 60L * 1000L));
-        } catch (Exception e) {
-            return -1;
-        }
     }
 
     private void logStarMapping(int[] row) {
