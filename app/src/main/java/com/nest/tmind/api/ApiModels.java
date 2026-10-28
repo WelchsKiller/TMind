@@ -1,5 +1,6 @@
 package com.nest.tmind.api;
 
+import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.List;
@@ -117,11 +118,13 @@ public final class ApiModels {
         /** Follow-up 세션 완료 여부. 없으면 앱이 currentType·별 상태로 판별한다. */
         public Boolean followupDone;
         /**
-         * 반복측정 1일차부터 날짜순 7칸.
-         * 1=안함, 2=오전/오후 중 1개, 3=1개+추가, 4=오전+오후, 5=둘 다+추가.
-         * Baseline 전에는 모두 1.
+         * 반복측정 1일차부터 날짜순 7칸(소수).
+         * 1.0 빈 별, 2.0 오전 반 개, 2.5 오후 반 개,
+         * 3.0 오전 반 개+이펙트, 3.5 오후 반 개+이펙트, 4.0 가득, 5.0 가득+이펙트.
+         * Baseline 전에는 모두 1.0.
          */
-        public List<Integer> stars;
+        @JsonAdapter(StarsListAdapter.class)
+        public List<Double> stars;
         /** 서버가 세션 판정에 사용한 오늘 날짜 yyyy-MM-dd */
         public String serverDate;
 

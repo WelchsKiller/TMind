@@ -491,7 +491,11 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     private boolean needsTodayFeedback() {
-        return today != null && today.needsFeedback();
+        if (today == null || !today.needsFeedback()) return false;
+        // 피드백은 이미 보냈는데 /today 캐시만 예전이면 버튼을 숨긴다.
+        long sid = today.currentSessionId != null ? today.currentSessionId : 0L;
+        if (sid <= 0) sid = session.getCurrentSessionId(false);
+        return sid <= 0 || !session.isFeedbackDone(sid);
     }
 
     private boolean needsEventFeedback() {
@@ -815,8 +819,8 @@ public class DashboardActivity extends BaseSeniorActivity {
 
     private boolean hasAnyFilledStar() {
         if (today == null || today.stars == null) return false;
-        for (Integer v : today.stars) {
-            if (v != null && v > 1) return true;
+        for (Double v : today.stars) {
+            if (v != null && v > 1.0) return true;
         }
         return false;
     }
@@ -894,10 +898,8 @@ public class DashboardActivity extends BaseSeniorActivity {
     }
 
     /**
-     * /today stars 7칸만 그린다. 1=빈, 2=한쪽, 3=한쪽+효과, 4=가득, 5=가득+효과.
-     * 어느 칸을 채울지는 서버 배열만 따른다. 참여 날짜로 칸을 다시 잡으면
-     * 베이스라인 날이 끼어 한 칸 밀린다.
-     * 한쪽만 채워진 칸(2, 3)은 오늘 오전/오후만 보고 왼쪽·오른쪽을 맞춘다.
+     * /today stars 7칸만 그린다.
+     * 1.0 빈, 2.0 오전(왼), 2.5 오후(오른), 3.0 오전+이펙트, 3.5 오후+이펙트, 4.0 가득, 5.0 가득+이펙트.
      */
     private int[] starStates() {
         int[] row = new int[7];
@@ -905,53 +907,12 @@ public class DashboardActivity extends BaseSeniorActivity {
         if (today != null && today.stars != null) {
             int n = Math.min(7, today.stars.size());
             for (int i = 0; i < n; i++) {
-                Integer v = today.stars.get(i);
-                row[i] = starStateFromServer(v != null ? v : 1);
+                Double v = today.stars.get(i);
+                row[i] = starStateFromServer(v != null ? v : 1.0);
             }
         }
-        applyTodayHalfStarSide(row);
         logStarMapping(row);
         return row;
-    }
-
-    /** 서버가 이미 한쪽만 준 칸만 AM=왼쪽 / PM=오른쪽으로 뒤집는다. 빈 칸은 채우지 않는다. */
-    private void applyTodayHalfStarSide(int[] row) {
-        if (row == null || today == null || today.stars == null) return;
-        Boolean pmOnly = isPmOnlyHalfStar();
-        if (pmOnly == null) return;
-        int n = Math.min(row.length, today.stars.size());
-        int lastHalf = -1;
-        for (int i = 0; i < n; i++) {
-            int server = serverStarAt(i);
-            if (server == 2 || server == 3) lastHalf = i;
-        }
-        if (lastHalf < 0) return;
-        boolean extra = serverStarAt(lastHalf) == 3;
-        row[lastHalf] = pmOnly
-                ? (extra ? MissionManager.STAR_HALF_RIGHT_BONUS : MissionManager.STAR_HALF_RIGHT)
-                : (extra ? MissionManager.STAR_HALF_BONUS : MissionManager.STAR_HALF);
-    }
-
-    /**
-     * 오늘 한쪽만 끝난 날이 오후인지. 오전만이면 false, 모르면 null(서버 기본 왼쪽 유지).
-     */
-    private Boolean isPmOnlyHalfStar() {
-        if (participation != null && participation.today != null) {
-            boolean am = participation.today.amDone;
-            boolean pm = participation.today.pmDone;
-            if (am && !pm) return false;
-            if (!am && pm) return true;
-            return null;
-        }
-        return isMissedMorning() ? true : null;
-    }
-
-    private int serverStarAt(int idx) {
-        if (today == null || today.stars == null || idx < 0 || idx >= today.stars.size()) {
-            return 1;
-        }
-        Integer v = today.stars.get(idx);
-        return v != null ? v : 1;
     }
 
     private void logStarMapping(int[] row) {
@@ -984,18 +945,23 @@ public class DashboardActivity extends BaseSeniorActivity {
         return "빈";
     }
 
-    /** 1=빈, 2=한쪽, 3=한쪽+효과, 4=가득, 5=가득+효과. */
-    private static int starStateFromServer(int serverStar) {
-        switch (serverStar) {
-            case 2:
+    /** 서버 소수 값을 UI 별 상태로 변환. */
+    private static int starStateFromServer(double serverStar) {
+        int key = (int) Math.round(serverStar * 10);
+        switch (key) {
+            case 20: // 2.0 오전 반 개
                 return MissionManager.STAR_HALF;
-            case 3:
+            case 25: // 2.5 오후 반 개
+                return MissionManager.STAR_HALF_RIGHT;
+            case 30: // 3.0 오전 반 개+이펙트
                 return MissionManager.STAR_HALF_BONUS;
-            case 4:
+            case 35: // 3.5 오후 반 개+이펙트
+                return MissionManager.STAR_HALF_RIGHT_BONUS;
+            case 40: // 4.0 가득
                 return MissionManager.STAR_FULL;
-            case 5:
+            case 50: // 5.0 가득+이펙트
                 return MissionManager.STAR_BONUS;
-            default:
+            default: // 1.0 빈 별
                 return MissionManager.STAR_EMPTY;
         }
     }

@@ -62,6 +62,19 @@ public final class MemberApiManager {
         return lastStartSession;
     }
 
+    /** 피드백 전송 직후 /today 재조회 전에 캐시 feedbackDone 을 맞춘다. */
+    private static void markCachedTodayFeedbackDone(long sessionId) {
+        ApiModels.TodayResponse cached = lastToday;
+        if (cached == null || sessionId <= 0) return;
+        if (cached.currentSessionId != null && cached.currentSessionId == sessionId) {
+            cached.feedbackDone = true;
+        }
+        ApiModels.StartSessionData started = lastStartSession;
+        if (started != null && started.sessionId == sessionId) {
+            started.feedbackDone = true;
+        }
+    }
+
     /**
      * 로그아웃·계정 전환 시 이전 참여자 메모리/로컬 캐시를 비운다.
      * lastToday 를 남기면 새 계정 홈에 이전 별이 잠깐·계속 그려진다.
@@ -189,6 +202,7 @@ public final class MemberApiManager {
 
             @Override
             public void onFailure(Call<ApiModels.ApiResponse<ApiModels.TodayResponse>> call, Throwable t) {
+                Log.w("TMindToday", "GET /today failed", t);
                 if (callback != null) {
                     callback.onError("오늘 세션 정보를 불러오지 못했습니다.");
                 }
@@ -252,7 +266,7 @@ public final class MemberApiManager {
         Log.i("TMindToday", "GET /today json=" + GSON.toJson(data));
     }
 
-    /** Logcat 필터: TMindToday. stars 1=빈, 2=한쪽, 3=한쪽+추가, 4=오전+오후, 5=둘다+추가 */
+    /** Logcat 필터: TMindToday. stars 1/2/2.5/3/3.5/4/5 */
     private static void logTodayStars(ApiModels.TodayResponse data) {
         if (data.stars == null) {
             Log.i("TMindToday", "GET /today stars=null (서버가 배열을 안 줌)");
@@ -262,25 +276,30 @@ public final class MemberApiManager {
                 + " raw=" + data.stars);
         int n = data.stars.size();
         for (int i = 0; i < n; i++) {
-            Integer v = data.stars.get(i);
-            int star = v != null ? v : 1;
+            Double v = data.stars.get(i);
+            double star = v != null ? v : 1.0;
             Log.i("TMindToday", "GET /today stars[" + i + "]=" + star
                     + " (" + describeServerStar(star) + ")");
         }
     }
 
-    private static String describeServerStar(int star) {
-        switch (star) {
-            case 2:
-                return "한쪽만(오전 또는 오후, 서버는 구분 안 함)";
-            case 3:
-                return "한쪽+추가측정";
-            case 4:
-                return "오전+오후";
-            case 5:
-                return "오전+오후+추가측정";
+    private static String describeServerStar(double star) {
+        int key = (int) Math.round(star * 10);
+        switch (key) {
+            case 20:
+                return "오전 반 개";
+            case 25:
+                return "오후 반 개";
+            case 30:
+                return "오전 반 개+이펙트";
+            case 35:
+                return "오후 반 개+이펙트";
+            case 40:
+                return "가득";
+            case 50:
+                return "가득+이펙트";
             default:
-                return "안 함/빈 별";
+                return "빈 별";
         }
     }
 
@@ -977,6 +996,8 @@ public final class MemberApiManager {
                         }
                         Log.d(TAG, "submitFeedback ok: sessionId=" + sessionId);
                         new SessionManager(context).setFeedbackDone(sessionId, true);
+                        // /today 재조회가 실패해도 홈에 '마음 결과 확인'이 남지 않게 캐시를 먼저 맞춘다.
+                        markCachedTodayFeedbackDone(sessionId);
                         refreshTodayAfterSave(context);
                     }
 
