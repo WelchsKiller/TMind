@@ -56,7 +56,8 @@ public final class EcgResultAnalyzer {
         }
 
         float[] sampled = downsample(raw, stride);
-        float[] displayWave = extractDisplaySegment(sampled, Math.max(spikeLen, r.fs * 2));
+        // 결과 화면 표시용: 필터/평균 박동 아이콘이 아니라 Raw 최근 구간
+        float[] displayWave = extractDisplaySegment(sampled, Math.max(r.fs * 4, spikeLen));
 
         Biquad hp = Biquad.highpass(r.fs, 0.67, 0.707);
         Biquad notch = heavy ? Biquad.notch(r.fs, 60.0, 30.0) : null;
@@ -86,13 +87,8 @@ public final class EcgResultAnalyzer {
             return r;
         }
 
-        float[] avgBeat = averageBeat(x, fsEff, 0.20, 0.40, 200, rloc);
-        if (avgBeat != null) {
-            avgBeat = smooth(avgBeat, level == ResourceManager.Level.LOW ? 1 : 3);
-            r.spike = makeIconSpikeFrom(avgBeat, spikeLen);
-        } else if (displayWave != null) {
-            r.spike = displayWave;
-        }
+        // UI/prefs 파형은 Raw 구간. SDNN·HR 은 아래 필터 신호의 R-peak 로만 계산.
+        r.spike = displayWave;
         r.rrMs = computeAvgRrMs(rloc, fsEff);
         r.hrBpm = (r.rrMs > 0) ? Math.round(60000f / r.rrMs) : 0;
         r.hrvMs = computeHrvMs(rloc, fsEff);
@@ -131,26 +127,17 @@ public final class EcgResultAnalyzer {
         return Math.sqrt(var) >= 0.02;
     }
 
-    /** 결과 화면용: 최근 구간을 잘라 표시 (피크 검출 실패 대비) */
+    /** 결과 화면용 Raw 구간. 진폭 정규화 없이 DC만 제거해 용지 이득(mm/mV)으로 그린다. */
     private static float[] extractDisplaySegment(float[] sampled, int maxLen) {
         if (sampled == null || sampled.length < 16) return null;
         int len = Math.min(sampled.length, Math.max(64, maxLen));
         int start = sampled.length - len;
         float[] out = new float[len];
         System.arraycopy(sampled, start, out, 0, len);
-        // DC 제거
         float mean = 0f;
         for (float v : out) mean += v;
         mean /= len;
-        float maxAbs = 0f;
-        for (int i = 0; i < len; i++) {
-            out[i] -= mean;
-            maxAbs = Math.max(maxAbs, Math.abs(out[i]));
-        }
-        if (maxAbs > 1e-6f) {
-            float s = 0.8f / maxAbs;
-            for (int i = 0; i < len; i++) out[i] *= s;
-        }
+        for (int i = 0; i < len; i++) out[i] -= mean;
         return out;
     }
 

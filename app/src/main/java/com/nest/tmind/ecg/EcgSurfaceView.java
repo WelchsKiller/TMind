@@ -9,6 +9,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callback, Runnable {
@@ -41,7 +42,7 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         repaintGrid();
     }
 
-    private volatile float paperSpeedMmPerSec = 12.5f; // 기본 12.5
+    private volatile float paperSpeedMmPerSec = 25f; // 임상 표준 25 mm/s
     private volatile float gainMmPerMv = 10f;
     private float pxPerMmX, pxPerMmY;
 
@@ -96,11 +97,8 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
 
     public void addSamples(float[] mv) {
         if (mv == null || mv.length == 0) return;
-
-        // 🔹 여기서 먼저 곡선용 중간 샘플을 생성
-        float[] smooth = roundifySegment(mv);
-
-        for (float v : smooth) {
+        // Raw ECG: 샘플 수·시간축을 바꾸지 않고 그대로 그린다 (roundify 보간 금지).
+        for (float v : mv) {
             q.add(v);
         }
     }
@@ -393,6 +391,8 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
 
 
     public void clearStreaming() {
+        staticMode = false;
+        staticSamples = null;
         q.clear();
         sweepX = 0f;
         lastY = null;
@@ -413,8 +413,8 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         if (samples == null || samples.length == 0) return;
 
         staticFs = Math.max(50, Math.min(1000, fs));
-        float[] smooth = roundifySegment(samples);
-        staticSamples = smooth;
+        // Raw ECG: 보간·샘플 수 변경 없이 원본 구간을 그대로 표시
+        staticSamples = Arrays.copyOf(samples, samples.length);
         staticMode = true;
 
         // Surface 준비 전이면 렌더 루프가 staticMode로 그리도록 두고,
@@ -479,9 +479,9 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
     }
 
     /**
-     * 결과 화면용: 전체 폭에 리샘플 + 스무딩해서 그리기
+     * 결과 화면용 Raw ECG: 측정과 같은 용지속도(mm/s)·샘플레이트로 시간축을 맞춘다.
+     * 화면에 들어가는 구간만 왼쪽부터 그린다 (폭에 억지로 늘리지 않음).
      */
-    // EcgSurfaceView 안의 기존 drawStatic 전체를 이걸로 교체
     private void drawStatic(Canvas c) {
         c.drawColor(Color.WHITE);
         computeMmToPx();
@@ -491,37 +491,19 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
 
         int w = c.getWidth(), h = c.getHeight();
         float cy = getWaveCenterY(h);
-        int N = Math.max(2, staticSamples.length);
-
-        float[] xs = new float[w];
-        float[] ys = new float[w];
-
-        // 원본 파형을 화면 폭에 맞게 리샘플
-        for (int i = 0; i < w; i++) {
-            double t = (i / (double) (w - 1)) * (N - 1);
-            int i0 = (int) Math.floor(t);
-            int i1 = Math.min(N - 1, i0 + 1);
-            float frac = (float) (t - i0);
-
-            float mv = staticSamples[i0] * (1 - frac) + staticSamples[i1] * frac;
-            float y = mvToY(mv, cy);
-
-            float x = i + 0.5f;
-            y = (float) Math.floor(y) + 0.5f;
-
-            xs[i] = x;
-            ys[i] = y;
-        }
-
-        // 🔥 정지 파형도 강하게 부드럽게
-        smoothYs(ys, w, 6);   // 결과 화면은 조금 더 세게 (원하면 4~8 사이로 조정)
+        float pxPerSec = paperSpeedMmPerSec * pxPerMmX;
+        float dx = pxPerSec / Math.max(1, staticFs);
+        int maxPts = Math.max(2, Math.min(staticSamples.length, (int) (w / Math.max(0.01f, dx))));
 
         Path p = new Path();
-        p.moveTo(xs[0], ys[0]);
-        for (int i = 1; i < w; i++) {
-            p.lineTo(xs[i], ys[i]);
+        float x0 = 0.5f;
+        float y0 = (float) Math.floor(mvToY(staticSamples[0], cy)) + 0.5f;
+        p.moveTo(x0, y0);
+        for (int i = 1; i < maxPts; i++) {
+            float x = i * dx + 0.5f;
+            float y = (float) Math.floor(mvToY(staticSamples[i], cy)) + 0.5f;
+            p.lineTo(x, y);
         }
-
         c.drawPath(p, wave);
     }
 

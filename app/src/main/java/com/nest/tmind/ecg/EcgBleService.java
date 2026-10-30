@@ -1305,55 +1305,17 @@ public class EcgBleService extends Service {
                 dispatchHrRr(null, null);
             }
             lastSignalGood = false;
-            dispatchSamples(new float[N]);
+            // 접촉 전이라도 기기 Raw ECG 를 그대로 보여 임상 확인이 가능하게 한다.
+            dispatchSamples(Arrays.copyOf(mv25, N));
             return;
         }
 
-        if (!lastSignalGood) {
-            beatIdx = 0;
-            spikeScale = 1f;
-            beatTimerMs = 0.0;
-        }
         lastSignalGood = true;
         haveHr = latestHr != null;
-
-        // RMS 기반 스케일
-        if (prevMv25 != null) {
-            double sum2 = 0;
-            for (int i = 0; i < N; i++) {
-                double d = mv25[i] - prevMv25[i];
-                sum2 += d * d;
-            }
-            double rms = Math.sqrt(sum2 / N);
-            nextSpikeScale = mapRmsToScale((float) rms);
-        } else {
-            nextSpikeScale = 1f;
-        }
         prevMv25 = mv25;
 
-        if (haveHr) {
-            beatTimerMs += FRAME_MS;
-            if (beatTimerMs >= beatPeriodMs) {
-                beatTimerMs -= beatPeriodMs;
-                beatIdx = 0;
-                spikeScale = nextSpikeScale;
-                lastSpikeStartMs = System.currentTimeMillis();
-            }
-        }
-
-        float[] out = new float[N];
-        for (int i = 0; i < N; i++) {
-            if (beatIdx >= 0 && beatIdx < spikeKernel.length) {
-                out[i] = spikeKernel[beatIdx++] * spikeScale;
-            } else {
-                out[i] = 0f;
-            }
-        }
-        if (beatIdx >= spikeKernel.length) {
-            beatIdx = -1;
-        }
-
-        dispatchSamples(Arrays.copyOf(out, N));
+        // 화면 = 기기 @W 프레임 Raw ECG (합성 QRS 사용 안 함). 분석용 EcgCapture 와 동일 샘플.
+        dispatchSamples(Arrays.copyOf(mv25, N));
 
         if (changed) tryFilter();
     }

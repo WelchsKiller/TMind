@@ -39,11 +39,22 @@
             android:layout_marginTop="8dp"
             android:textColor="@color/text_secondary" />
 
+        <TextView
+            android:id="@+id/tvRawCaption"
+            style="@style/SeniorBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/hrv_result_raw_caption"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
         <com.nest.tmind.ecg.EcgSurfaceView
             android:id="@+id/ecgView"
             android:layout_width="match_parent"
-            android:layout_height="160dp"
-            android:layout_marginTop="16dp" />
+            android:layout_height="220dp"
+            android:layout_marginTop="8dp" />
 
         <LinearLayout
             android:layout_width="match_parent"

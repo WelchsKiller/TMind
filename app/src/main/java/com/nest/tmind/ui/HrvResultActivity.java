@@ -3,6 +3,7 @@ package com.nest.tmind.ui;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -15,6 +16,7 @@ import com.nest.tmind.R;
 import com.nest.tmind.api.ApiModels;
 import com.nest.tmind.api.MemberApiManager;
 import com.nest.tmind.ecg.EcgConfig;
+import com.nest.tmind.ecg.EcgSampleGenerator;
 import com.nest.tmind.ecg.EcgSurfaceView;
 import com.nest.tmind.ecg.LastEcgResult;
 import com.nest.tmind.util.MissionManager;
@@ -26,6 +28,8 @@ import java.util.Arrays;
 public class HrvResultActivity extends BaseSeniorActivity {
 
     private static final String TAG = "HrvResult";
+    /** BLE 없이 Raw ECG 표시 확인용 테스트 진입 */
+    public static final String EXTRA_SHOW_RAW_TEST = "show_raw_test";
 
     private EcgSurfaceView ecgView;
     private TextView tvBpm, tvHrvMs, tvDate;
@@ -44,11 +48,24 @@ public class HrvResultActivity extends BaseSeniorActivity {
         tvDate = findViewById(R.id.tvDate);
         btnNext = findViewById(R.id.btnNext);
 
-        ecgView.setDrawGrid(false);
-        ecgView.setDrawAxisLabels(false);
+        boolean rawTest = getIntent().getBooleanExtra(EXTRA_SHOW_RAW_TEST, false);
+
+        // 측정·테스트 공통: Raw 파형 + 용지속도 25 mm/s. 테스트 안내는 테스트 진입만.
+        ecgView.setDrawGrid(true);
+        ecgView.setDrawAxisLabels(rawTest);
         ecgView.setSpeed(25f);
         ecgView.setGain(10f);
         ecgView.setWaveColor(ContextCompat.getColor(this, R.color.teal_primary));
+
+        TextView tvRawCaption = findViewById(R.id.tvRawCaption);
+        if (tvRawCaption != null) {
+            if (rawTest) {
+                tvRawCaption.setVisibility(View.VISIBLE);
+                tvRawCaption.setText(R.string.hrv_result_raw_caption);
+            } else {
+                tvRawCaption.setVisibility(View.GONE);
+            }
+        }
 
         bindLatestResult();
         restoreAdditionalMode();
@@ -222,47 +239,39 @@ public class HrvResultActivity extends BaseSeniorActivity {
             btnNext.setText(resultValid ? R.string.confirm_result : R.string.hrv_remeasure);
         }
 
-        if (resultValid && LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
-            final float[] spike = LastEcgResult.lastSpike;
+        final float[] rawWave = pickRawDisplayWave();
+        if (resultValid && rawWave != null && rawWave.length > 0) {
             final int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
             Runnable draw = () -> {
-                int w = Math.max(200, ecgView.getWidth());
-                float[] wave = resizeWave(spike, w);
-                normalizeWave(wave);
-                if (wave.length == 0) return;
                 ecgView.setSampleRateHz(fs);
-                ecgView.showStaticWave(wave, fs);
+                ecgView.showStaticWave(rawWave, fs);
             };
             ecgView.post(draw);
             // Surface/레이아웃 준비 후 한 번 더 (빈 그래프 방지)
-            ecgView.postDelayed(draw, 120);
-        } else if (resultValid) {
-            final int hrForWave = hr > 0 ? hr : 70;
-            Runnable draw = () -> {
-                int w = Math.max(200, ecgView.getWidth());
-                float[] wave = placeholderWave(w, hrForWave);
-                ecgView.setSampleRateHz(250);
-                ecgView.showStaticWave(wave, 250);
-            };
-            ecgView.post(draw);
             ecgView.postDelayed(draw, 120);
         } else {
             ecgView.clearStreaming();
         }
     }
 
-    /** 파형 미수집 시에도 결과 화면이 비지 않도록 심박 주기 안내 파형 */
-    private static float[] placeholderWave(int len, int hrBpm) {
-        float[] out = new float[Math.max(64, len)];
-        double period = 250.0 * 60.0 / Math.max(40, Math.min(180, hrBpm));
-        for (int i = 0; i < out.length; i++) {
-            double phase = (i % period) / period;
-            float v = 0f;
-            if (phase < 0.08) v = (float) Math.sin(phase / 0.08 * Math.PI) * 0.85f;
-            else if (phase < 0.2) v = (float) (-0.15 * Math.sin((phase - 0.08) / 0.12 * Math.PI));
-            out[i] = v * 0.5f;
+    /** 결과 화면: 업로드용 Raw 우선, 없으면 분석이 남긴 Raw 구간. 합성 QRS 없음. */
+    private static float[] pickRawDisplayWave() {
+        float[] raw = LastEcgResult.lastRawSignal;
+        int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
+        if (raw != null && raw.length >= Math.max(16, fs / 2)) {
+            float[] out = EcgSampleGenerator.tailSegment(raw, fs, 4);
+            if (out.length > 0) {
+                Log.i(TAG, "raw display samples=" + out.length + " fs=" + fs
+                        + " fullRaw=" + raw.length);
+                return out;
+            }
         }
-        return out;
+        if (LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
+            Log.i(TAG, "raw display fallback lastSpike=" + LastEcgResult.lastSpike.length);
+            return Arrays.copyOf(LastEcgResult.lastSpike, LastEcgResult.lastSpike.length);
+        }
+        Log.w(TAG, "raw display empty");
+        return null;
     }
 
     private void goDashboard() {
@@ -270,28 +279,5 @@ public class HrvResultActivity extends BaseSeniorActivity {
         i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(i);
         finish();
-    }
-
-    private static float[] resizeWave(float[] src, int outLen) {
-        if (src == null || src.length == 0 || outLen <= 0) return new float[0];
-        if (src.length == outLen) return Arrays.copyOf(src, src.length);
-        float[] out = new float[outLen];
-        for (int i = 0; i < outLen; i++) {
-            double t = i * (src.length - 1) / (double) (outLen - 1);
-            int i0 = (int) Math.floor(t);
-            int i1 = Math.min(src.length - 1, i0 + 1);
-            double frac = t - i0;
-            out[i] = (float) (src[i0] * (1.0 - frac) + src[i1] * frac);
-        }
-        return out;
-    }
-
-    private static void normalizeWave(float[] wave) {
-        float maxAbs = 0f;
-        for (float v : wave) maxAbs = Math.max(maxAbs, Math.abs(v));
-        if (maxAbs > 0f) {
-            float s = 0.6f / maxAbs;
-            for (int i = 0; i < wave.length; i++) wave[i] *= s;
-        }
     }
 }

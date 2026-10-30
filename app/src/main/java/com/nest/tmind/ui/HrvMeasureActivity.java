@@ -115,7 +115,7 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         highlightStep(1);
         ecgView.setCornerRadiusDp(12f);
         ecgView.setSeniorGridStyle();
-        ecgView.setSpeed(12.5f);
+        ecgView.setSpeed(25f); // 결과 화면과 동일 임상 용지속도 (25 mm/s)
         ecgView.setGain(10f);
         ecgView.setWaveCenterRatio(0.5f);
         ecgView.setFilters(false, false);
@@ -142,10 +142,8 @@ public class HrvMeasureActivity extends BaseSeniorActivity
     }
 
     /**
-     * BLE 없이 결과 화면·서버 전송을 확인하기 위한 경로.
-     * 지표를 직접 만들지 않고 5분·250Hz 합성 ECG 를 캡처 버퍼에 넣은 뒤
-     * 실측과 같은 분석기를 태운다. 그래야 서버로 올라가는 원본 신호와 지표가
-     * 실제 측정과 같은 형태가 된다.
+     * BLE 없이 결과 화면(수치·Raw 파형)을 확인하는 경로.
+     * 측정 화면 미리보기 없이 분석 후 결과 화면으로만 이동한다.
      */
     private void runTestQuadrant() {
         stopWaitBleReady();
@@ -158,9 +156,13 @@ public class HrvMeasureActivity extends BaseSeniorActivity
         Random rnd = new Random();
         int targetHr = 55 + rnd.nextInt(66);      // 55~120
         int targetSdnn = 25 + rnd.nextInt(126);   // 25~150
+        final int fs = EcgSampleGenerator.DEFAULT_FS;
+        final int durationSec = 60;
 
         MeasureSessionStats.reset();
-        EcgSampleGenerator.fillCapture(targetHr, targetSdnn);
+        float[] raw = EcgSampleGenerator.generate(targetHr, targetSdnn, fs, durationSec);
+        EcgSampleGenerator.fillCaptureWith(raw, fs);
+
         EcgResultAnalyzer.Result r = EcgResultAnalyzer.analyze(this);
         if (!r.valid) {
             Toast.makeText(this, "샘플 신호 분석에 실패했습니다. 다시 시도해 주세요.",
@@ -168,12 +170,13 @@ public class HrvMeasureActivity extends BaseSeniorActivity
             return;
         }
 
-        Toast.makeText(this,
-                "샘플 HR " + r.hrBpm + " · HRV " + r.hrvMs + " ms · stress " + r.stressScore,
-                Toast.LENGTH_SHORT).show();
+        // 결과 화면이 분석 수치·Raw 파형을 쓰도록 원본을 유지한다.
+        LastEcgResult.setLastRawSignal(raw);
+        LastEcgResult.lastFs = fs;
 
-        // 테스트도 측정 결과 화면으로 (분석은 3미션 완료 후)
-        startActivity(hrvResultIntent());
+        Intent i = hrvResultIntent();
+        i.putExtra(HrvResultActivity.EXTRA_SHOW_RAW_TEST, true);
+        startActivity(i);
         finish();
     }
 

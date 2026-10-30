@@ -21,8 +21,9 @@ public class LastEcgResult {
     private static final String KEY_HISTORY = "history";
 
     // ────────────── 마지막 측정 결과 (UI에서 바로 씀) ──────────────
-    public static float[] lastSpike = null;  // 결과 화면 / 탭1에서 그리는 파형
-    /** 서버 업로드용 5분 원시 신호 (메모리만, prefs 미저장) */
+    /** 결과 화면용 Raw 구간(최근 수 초). 예전 합성 QRS 아이콘 자리. */
+    public static float[] lastSpike = null;
+    /** 서버 업로드·결과 표시용 5분 Raw ECG (메모리만, prefs 미저장) */
     public static float[] lastRawSignal = null;
     public static int lastFs = 0;            // 샘플링 레이트
     public static int lastHrBpm = 0;         // 마지막 BPM

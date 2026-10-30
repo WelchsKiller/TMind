@@ -146,6 +146,7 @@
     <string name="hrv_unit_format">%1$d ms</string>
     <string name="hrv_result_next">확인 후 다음으로</string>
     <string name="hrv_test_quadrant">테스트 · 사분면 결과 보기</string>
+    <string name="hrv_result_raw_caption">테스트 Raw ECG (샘플 데이터)</string>
     <string name="next">다음</string>
     <string name="prev">이전</string>
 

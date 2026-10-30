@@ -31,16 +31,37 @@ public final class EcgSampleGenerator {
     }
 
     public static void fillCapture(int targetHrBpm, int targetSdnnMs, int fs, int durationSec) {
+        float[] signal = generate(targetHrBpm, targetSdnnMs, fs, durationSec);
+        fillCaptureWith(signal, fs);
+    }
+
+    /** 이미 만든 Raw 샘플을 캡처 버퍼에 넣는다 (화면 미리보기와 동일 배열 공유용). */
+    public static void fillCaptureWith(float[] signal, int fs) {
         EcgCapture capture = EcgCapture.i();
         capture.consumeAll();
-        capture.setFs(fs);
-        float[] signal = generate(targetHrBpm, targetSdnnMs, fs, durationSec);
+        capture.setFs(fs > 0 ? fs : DEFAULT_FS);
+        if (signal == null || signal.length == 0) return;
         for (int offset = 0; offset < signal.length; offset += CHUNK) {
             int len = Math.min(CHUNK, signal.length - offset);
             float[] chunk = new float[len];
             System.arraycopy(signal, offset, chunk, 0, len);
             capture.add(chunk);
         }
+    }
+
+    /** 결과/미리보기용: Raw 끝부분 구간 (DC 제거만, 진폭·샘플 수 유지). */
+    public static float[] tailSegment(float[] signal, int fs, int seconds) {
+        if (signal == null || signal.length == 0) return new float[0];
+        int rate = fs > 0 ? fs : DEFAULT_FS;
+        int len = Math.min(signal.length, Math.max(rate, rate * Math.max(1, seconds)));
+        int start = signal.length - len;
+        float[] out = new float[len];
+        System.arraycopy(signal, start, out, 0, len);
+        float mean = 0f;
+        for (float v : out) mean += v;
+        mean /= len;
+        for (int i = 0; i < len; i++) out[i] -= mean;
+        return out;
     }
 
     /**
