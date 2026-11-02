@@ -58,7 +58,9 @@
 
         <activity android:name=".ui.DashboardActivity" android:launchMode="singleTop" />
         <activity android:name=".ui.HrvGuideActivity" />
-        <activity android:name=".ui.HrvMeasureActivity" />
+        <activity
+            android:name=".ui.HrvMeasureActivity"
+            android:screenOrientation="portrait" />
         <activity android:name=".ui.HrvResultActivity" />
         <activity android:name=".ui.EmaSurveyActivity" />
         <activity android:name=".ui.EmaIntroActivity" />
