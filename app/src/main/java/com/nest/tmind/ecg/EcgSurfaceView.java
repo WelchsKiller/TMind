@@ -482,9 +482,19 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         staticSamples = null;
     }
 
+    /** 현재 용지속도(25 mm/s)로 이 너비를 채우는 데 필요한 초. */
+    public int secondsToFillWidth() {
+        computeMmToPx();
+        int w = getWidth();
+        if (w <= 0) w = getMeasuredWidth();
+        if (w <= 0) return 10;
+        float pxPerSec = paperSpeedMmPerSec * pxPerMmX;
+        if (pxPerSec < 1f) return 10;
+        return Math.max(6, (int) Math.ceil(w / pxPerSec) + 1);
+    }
+
     /**
-     * 결과 화면용 Raw ECG: 측정과 같은 용지속도(mm/s)·샘플레이트로 시간축을 맞춘다.
-     * 화면에 들어가는 구간만 왼쪽부터 그린다 (폭에 억지로 늘리지 않음).
+     * 결과 화면: 측정과 같은 용지속도(mm/s)로 왼쪽부터 오른쪽 끝까지 그린다.
      */
     private void drawStatic(Canvas c) {
         c.drawColor(Color.WHITE);
@@ -497,15 +507,18 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         float cy = getWaveCenterY(h);
         float pxPerSec = paperSpeedMmPerSec * pxPerMmX;
         float dx = pxPerSec / Math.max(1, staticFs);
-        int maxPts = Math.max(2, Math.min(staticSamples.length, (int) (w / Math.max(0.01f, dx))));
+        int n = staticSamples.length;
+        int need = Math.max(2, (int) Math.ceil(w / Math.max(0.01f, dx)) + 1);
 
         Path p = new Path();
         float x0 = 0.5f;
         float y0 = (float) Math.floor(mvToY(staticSamples[0], cy)) + 0.5f;
         p.moveTo(x0, y0);
-        for (int i = 1; i < maxPts; i++) {
+        for (int i = 1; i < need; i++) {
             float x = i * dx + 0.5f;
-            float y = (float) Math.floor(mvToY(staticSamples[i], cy)) + 0.5f;
+            if (x > w) break;
+            float mv = staticSamples[i % n];
+            float y = (float) Math.floor(mvToY(mv, cy)) + 0.5f;
             p.lineTo(x, y);
         }
         c.drawPath(p, wave);

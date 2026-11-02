@@ -56,15 +56,20 @@ public final class EcgSampleGenerator {
     public static float[] cleanMonitorTrace(int hrBpm, int fs, int seconds) {
         int rate = fs > 0 ? fs : DEFAULT_FS;
         int hr = clampInt(hrBpm, 40, 180);
-        int total = Math.max(rate, rate * Math.max(1, seconds));
+        int padSec = Math.max(1, seconds) + 1;
+        int total = Math.max(rate, rate * padSec);
         float[] out = new float[total];
         double rrSec = 60.0 / hr;
         double beatSec = rrSec * 0.35;
-        while (beatSec < seconds + 0.4) {
+        while (beatSec < padSec) {
             writeBeat(out, rate, beatSec);
             beatSec += rrSec;
         }
-        return out;
+        int keep = Math.max(rate, rate * Math.max(1, seconds));
+        if (keep >= out.length) return out;
+        float[] trimmed = new float[keep];
+        System.arraycopy(out, 0, trimmed, 0, keep);
+        return trimmed;
     }
 
     /** 결과/미리보기용: Raw 끝부분 구간 (DC 제거만, 진폭·샘플 수 유지). */

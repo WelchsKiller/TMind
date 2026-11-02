@@ -256,14 +256,15 @@ public class HrvResultActivity extends BaseSeniorActivity {
     /** 결과 화면은 측정과 같은 깨끗한 PQRST. Raw 확인 테스트만 원본 구간을 쓴다. */
     private float[] pickDisplayWave() {
         int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
+        int fillSec = ecgView != null ? ecgView.secondsToFillWidth() : 10;
         if (getIntent().getBooleanExtra(EXTRA_SHOW_RAW_TEST, false)) {
             float[] raw = LastEcgResult.lastRawSignal;
             if (raw != null && raw.length >= Math.max(16, fs / 2)) {
-                return EcgSampleGenerator.tailSegment(raw, fs, 4);
+                return EcgSampleGenerator.tailSegment(raw, fs, fillSec);
             }
         }
         int hr = LastEcgResult.lastHrBpm > 0 ? LastEcgResult.lastHrBpm : 72;
-        float[] clean = EcgSampleGenerator.cleanMonitorTrace(hr, fs, 4);
+        float[] clean = EcgSampleGenerator.cleanMonitorTrace(hr, fs, fillSec);
         if (clean != null && clean.length > 0) return clean;
         if (LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
             return Arrays.copyOf(LastEcgResult.lastSpike, LastEcgResult.lastSpike.length);
