@@ -66,6 +66,8 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
     private float displaySmoothAlpha = 0.35f;   // 0.0~1.0, 작을수록 더 부드럽게
     private Float lastSmoothY = null;
 
+    /** 화면에는 이미 정규화된 PQRST(약 0.9 mV)가 들어온다. 추가 이득/필터 없음. */
+
     public void setSampleRateHz(int sr) {
         sampleRateHz = Math.max(50, Math.min(1000, sr));
     }
@@ -97,7 +99,6 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
 
     public void addSamples(float[] mv) {
         if (mv == null || mv.length == 0) return;
-        // Raw ECG: 샘플 수·시간축을 바꾸지 않고 그대로 그린다 (roundify 보간 금지).
         for (float v : mv) {
             q.add(v);
         }
@@ -200,7 +201,7 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
 
         // ECG 파형 스타일
         wave.setColor(Color.parseColor("#1064D9"));
-        wave.setStrokeWidth(6f);
+        wave.setStrokeWidth(3.2f);
         wave.setStyle(Paint.Style.STROKE);
         wave.setStrokeCap(Paint.Cap.ROUND);          // 선 끝 둥글게
         wave.setStrokeJoin(Paint.Join.ROUND);        // 꺾이는 부분 둥글게
@@ -292,7 +293,13 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
     }
 
     private float mvToY(float mv, float centerY) {
-        return centerY - mv * gainMmPerMv * pxPerMmY;
+        float y = centerY - mv * gainMmPerMv * pxPerMmY;
+        int h = back != null ? back.getHeight() : getHeight();
+        if (h > 1) {
+            if (y < 2f) y = 2f;
+            if (y > h - 2f) y = h - 2f;
+        }
+        return y;
     }
 
     // 스트리밍용 y 스무딩 (IIR 1차 로우패스)
@@ -372,9 +379,7 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
             return;
         }
 
-        // 🔥 여기서 y값들을 화면용으로 아주 부드럽게 만든다
-        //     passes를 4~6 사이로 바꿔보면서 느낌 맞추기
-        smoothYs(ys, n, 5);
+        // 임상 필터를 이미 걸었으므로 추가 스무딩은 QRS 만 뭉갠다.
 
         Path path = new Path();
         path.moveTo(xs[0], ys[0]);
@@ -413,7 +418,6 @@ public class EcgSurfaceView extends SurfaceView implements SurfaceHolder.Callbac
         if (samples == null || samples.length == 0) return;
 
         staticFs = Math.max(50, Math.min(1000, fs));
-        // Raw ECG: 보간·샘플 수 변경 없이 원본 구간을 그대로 표시
         staticSamples = Arrays.copyOf(samples, samples.length);
         staticMode = true;
 

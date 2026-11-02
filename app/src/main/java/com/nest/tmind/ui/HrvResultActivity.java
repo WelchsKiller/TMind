@@ -239,38 +239,35 @@ public class HrvResultActivity extends BaseSeniorActivity {
             btnNext.setText(resultValid ? R.string.confirm_result : R.string.hrv_remeasure);
         }
 
-        final float[] rawWave = pickRawDisplayWave();
-        if (resultValid && rawWave != null && rawWave.length > 0) {
+        final float[] wave = pickDisplayWave();
+        if (resultValid && wave != null && wave.length > 0) {
             final int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
             Runnable draw = () -> {
                 ecgView.setSampleRateHz(fs);
-                ecgView.showStaticWave(rawWave, fs);
+                ecgView.showStaticWave(wave, fs);
             };
             ecgView.post(draw);
-            // Surface/레이아웃 준비 후 한 번 더 (빈 그래프 방지)
             ecgView.postDelayed(draw, 120);
         } else {
             ecgView.clearStreaming();
         }
     }
 
-    /** 결과 화면: 업로드용 Raw 우선, 없으면 분석이 남긴 Raw 구간. 합성 QRS 없음. */
-    private static float[] pickRawDisplayWave() {
-        float[] raw = LastEcgResult.lastRawSignal;
+    /** 결과 화면은 측정과 같은 깨끗한 PQRST. Raw 확인 테스트만 원본 구간을 쓴다. */
+    private float[] pickDisplayWave() {
         int fs = LastEcgResult.lastFs > 0 ? LastEcgResult.lastFs : 250;
-        if (raw != null && raw.length >= Math.max(16, fs / 2)) {
-            float[] out = EcgSampleGenerator.tailSegment(raw, fs, 4);
-            if (out.length > 0) {
-                Log.i(TAG, "raw display samples=" + out.length + " fs=" + fs
-                        + " fullRaw=" + raw.length);
-                return out;
+        if (getIntent().getBooleanExtra(EXTRA_SHOW_RAW_TEST, false)) {
+            float[] raw = LastEcgResult.lastRawSignal;
+            if (raw != null && raw.length >= Math.max(16, fs / 2)) {
+                return EcgSampleGenerator.tailSegment(raw, fs, 4);
             }
         }
+        int hr = LastEcgResult.lastHrBpm > 0 ? LastEcgResult.lastHrBpm : 72;
+        float[] clean = EcgSampleGenerator.cleanMonitorTrace(hr, fs, 4);
+        if (clean != null && clean.length > 0) return clean;
         if (LastEcgResult.lastSpike != null && LastEcgResult.lastSpike.length > 0) {
-            Log.i(TAG, "raw display fallback lastSpike=" + LastEcgResult.lastSpike.length);
             return Arrays.copyOf(LastEcgResult.lastSpike, LastEcgResult.lastSpike.length);
         }
-        Log.w(TAG, "raw display empty");
         return null;
     }
 

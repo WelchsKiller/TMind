@@ -335,8 +335,18 @@ public class EcgBleService extends Service {
     private int framesWithoutHr = 0;
     private static final int CONTACT_LOST_FRAMES = 20;
     private float[] prevMv25 = null;
-    private float spikeScale = 1f;
-    private float nextSpikeScale = 1f;
+    private float spikeScale = 0.90f;
+    private float nextSpikeScale = 0.90f;
+    private float spikeScalePos = 0.90f;
+    private float spikeScaleNeg = 0.90f;
+    private float rawDc;
+    private float beatPosMax;
+    private float beatNegMin;
+    private float slowPos = 0.20f;
+    private float slowNeg = 0.20f;
+    private static final float DISPLAY_BASE_MV = 0.90f;
+    private static final float DISPLAY_SCALE_MIN = 0.50f;
+    private static final float DISPLAY_SCALE_MAX = 1.40f;
     private final Random rnd = new Random();
 
     private String prevData50 = null;
@@ -1157,6 +1167,10 @@ public class EcgBleService extends Service {
         prevData50 = null;
         prevMv25 = null;
         beatIdx = -1;
+        beatPosMax = 0f;
+        beatNegMin = 0f;
+        spikeScalePos = DISPLAY_BASE_MV;
+        spikeScaleNeg = DISPLAY_BASE_MV;
         EcgCapture.i().setFs(FS_PLOT);
         EcgCapture.i().consumeAll();
         lastSignalGood = false;
@@ -1305,22 +1319,93 @@ public class EcgBleService extends Service {
                 dispatchHrRr(null, null);
             }
             lastSignalGood = false;
-            // 접촉 전이라도 기기 Raw ECG 를 그대로 보여 임상 확인이 가능하게 한다.
-            dispatchSamples(Arrays.copyOf(mv25, N));
+            dispatchSamples(new float[N]);
             return;
         }
 
+        if (!lastSignalGood) {
+            beatIdx = 0;
+            spikeScale = DISPLAY_BASE_MV;
+            spikeScalePos = DISPLAY_BASE_MV;
+            spikeScaleNeg = DISPLAY_BASE_MV;
+            beatTimerMs = 0.0;
+            beatPosMax = 0f;
+            beatNegMin = 0f;
+            rawDc = 0f;
+        }
         lastSignalGood = true;
         haveHr = latestHr != null;
         prevMv25 = mv25;
 
-        // 화면 = 기기 @W 프레임 Raw ECG (합성 QRS 사용 안 함). 분석용 EcgCapture 와 동일 샘플.
-        dispatchSamples(Arrays.copyOf(mv25, N));
+        collectRawBeatPeaks(mv25);
+
+        // 화면은 HR/RR 박동마다 깨끗한 PQRST. 높이는 직전 박동의 실측 위·아래 진폭.
+        beatTimerMs += FRAME_MS;
+        double period = beatPeriodMs > 300 ? beatPeriodMs : 1000.0;
+        while (beatTimerMs >= period) {
+            beatTimerMs -= period;
+            applyRawPeaksToDisplayScale();
+            beatIdx = 0;
+            lastSpikeStartMs = System.currentTimeMillis();
+        }
+
+        float[] out = new float[N];
+        if (spikeKernel != null) {
+            for (int i = 0; i < N; i++) {
+                if (beatIdx >= 0 && beatIdx < spikeKernel.length) {
+                    float k = spikeKernel[beatIdx++];
+                    out[i] = k * (k >= 0f ? spikeScalePos : spikeScaleNeg);
+                } else {
+                    out[i] = 0f;
+                }
+            }
+            if (beatIdx >= spikeKernel.length) {
+                beatIdx = -1;
+            }
+        }
+        dispatchSamples(out);
 
         if (changed) tryFilter();
     }
 
     // ===== 스케일 맵핑 =====
+    private void collectRawBeatPeaks(float[] mv) {
+        if (mv == null) return;
+        for (float v : mv) {
+            rawDc += 0.02f * (v - rawDc);
+            float ac = v - rawDc;
+            if (ac > beatPosMax) beatPosMax = ac;
+            if (ac < beatNegMin) beatNegMin = ac;
+        }
+    }
+
+    /** 직전 박동의 +R / -S 실측 크기로 다음 박동 위·아래 높이를 정한다. */
+    private void applyRawPeaksToDisplayScale() {
+        float pos = Math.max(0f, beatPosMax);
+        float neg = Math.max(0f, -beatNegMin);
+        if (pos > 0.001f) {
+            slowPos = 0.85f * slowPos + 0.15f * pos;
+        }
+        if (neg > 0.001f) {
+            slowNeg = 0.85f * slowNeg + 0.15f * neg;
+        }
+        spikeScalePos = scaleFromPeak(pos, slowPos);
+        spikeScaleNeg = scaleFromPeak(neg, slowNeg);
+        spikeScale = 0.5f * (spikeScalePos + spikeScaleNeg);
+        beatPosMax = 0f;
+        beatNegMin = 0f;
+    }
+
+    private static float scaleFromPeak(float peak, float slow) {
+        float ref = Math.max(0.02f, slow);
+        float limited = Math.min(peak, ref * 2.4f);
+        float ratio = limited / ref;
+        float s = DISPLAY_BASE_MV * ratio;
+        if (s < DISPLAY_SCALE_MIN) return DISPLAY_SCALE_MIN;
+        if (s > DISPLAY_SCALE_MAX) return DISPLAY_SCALE_MAX;
+        return s;
+    }
+
     private float mapRmsToScale(float rmsMv) {
         float s = 0.8f + 0.8f * rmsMv;
         s = Math.max(0.8f, Math.min(1.2f, s));
@@ -1343,19 +1428,18 @@ public class EcgBleService extends Service {
 
     // ===== ECG 템플릿 =====
     private void buildIconSpikeKernel(int fs) {
-        int n = fs;
+        // 약 0.72초 PQRST. 60~100bpm 에서 T파가 다음 R 전에 끝나게.
+        int n = Math.max(80, Math.round(fs * 0.72f));
         spikeKernel = new float[n];
 
         for (int i = 0; i < n; i++) {
-            float t = i / (float) (n - 1);
+            float t = i / (float) Math.max(1, n - 1);
             float y = 0f;
-
-            y += 0.08f * gauss(t, 0.18f, 0.03f);   // P
-            y += -0.25f * gauss(t, 0.46f, 0.015f); // Q
-            y += 1.00f * gauss(t, 0.50f, 0.010f);  // R
-            y += -0.45f * gauss(t, 0.54f, 0.015f); // S
-            y += 0.30f * gauss(t, 0.70f, 0.05f);   // T
-
+            y += 0.10f * gauss(t, 0.16f, 0.028f);  // P
+            y += -0.18f * gauss(t, 0.40f, 0.012f); // Q
+            y += 1.00f * gauss(t, 0.46f, 0.010f);  // R
+            y += -0.40f * gauss(t, 0.52f, 0.014f); // S
+            y += 0.28f * gauss(t, 0.72f, 0.045f);  // T
             spikeKernel[i] = y;
         }
 
@@ -1455,10 +1539,6 @@ public class EcgBleService extends Service {
         if (now - lastSpikeStartMs < MIN_GAP_MS) return;
 
         lastSpikeStartMs = now;
-        beatIdx = 0;
-
-        spikeScale = nextSpikeScale;
-
         spikeTimes.addLast(now);
         while (spikeTimes.size() > 6) spikeTimes.removeFirst();
 

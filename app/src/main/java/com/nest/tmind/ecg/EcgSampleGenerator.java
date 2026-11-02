@@ -49,6 +49,24 @@ public final class EcgSampleGenerator {
         }
     }
 
+    /**
+     * 측정·결과 화면용 깨끗한 PQRST. 잡음·기저선 없이 그림5처럼 그린다.
+     * 저장·분석 Raw 와는 별개다.
+     */
+    public static float[] cleanMonitorTrace(int hrBpm, int fs, int seconds) {
+        int rate = fs > 0 ? fs : DEFAULT_FS;
+        int hr = clampInt(hrBpm, 40, 180);
+        int total = Math.max(rate, rate * Math.max(1, seconds));
+        float[] out = new float[total];
+        double rrSec = 60.0 / hr;
+        double beatSec = rrSec * 0.35;
+        while (beatSec < seconds + 0.4) {
+            writeBeat(out, rate, beatSec);
+            beatSec += rrSec;
+        }
+        return out;
+    }
+
     /** 결과/미리보기용: Raw 끝부분 구간 (DC 제거만, 진폭·샘플 수 유지). */
     public static float[] tailSegment(float[] signal, int fs, int seconds) {
         if (signal == null || signal.length == 0) return new float[0];

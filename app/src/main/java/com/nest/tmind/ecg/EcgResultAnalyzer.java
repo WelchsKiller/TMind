@@ -325,38 +325,4 @@ public final class EcgResultAnalyzer {
             o[i] = (s[i - 1] + s[i] + s[i + 1]) / 3f;
         return o;
     }
-
-    private static class Biquad {
-        double b0, b1, b2, a1, a2, z1, z2;
-
-        Biquad(double b0, double b1, double b2, double a0, double a1, double a2) {
-            this.b0 = b0 / a0;
-            this.b1 = b1 / a0;
-            this.b2 = b2 / a0;
-            this.a1 = a1 / a0;
-            this.a2 = a2 / a0;
-        }
-
-        double process(double x) {
-            double y = b0 * x + z1;
-            z1 = b1 * x - a1 * y + z2;
-            z2 = b2 * x - a2 * y;
-            return y;
-        }
-
-        static Biquad lowpass(int fs, double fc, double q) {
-            double w0 = 2 * Math.PI * fc / fs, c = Math.cos(w0), s = Math.sin(w0), a = s / (2 * q);
-            return new Biquad((1 - c) / 2, 1 - c, (1 - c) / 2, 1 + a, -2 * c, 1 - a);
-        }
-
-        static Biquad highpass(int fs, double fc, double q) {
-            double w0 = 2 * Math.PI * fc / fs, c = Math.cos(w0), s = Math.sin(w0), a = s / (2 * q);
-            return new Biquad((1 + c) / 2, -(1 + c), (1 + c) / 2, 1 + a, -2 * c, 1 - a);
-        }
-
-        static Biquad notch(int fs, double f0, double q) {
-            double w0 = 2 * Math.PI * f0 / fs, c = Math.cos(w0), s = Math.sin(w0), a = s / (2 * q);
-            return new Biquad(1, -2 * c, 1, 1 + a, -2 * c, 1 - a);
-        }
-    }
 }
