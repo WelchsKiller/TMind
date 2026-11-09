@@ -39,6 +39,7 @@ public final class EmaQuestionBank {
         }
     }
 
+    /** 서버 options 가 없을 때만 쓰는 로컬 폴백. 서버가 있으면 서버 순서를 그대로 쓴다. */
     private static final String[] SCALE_INTENSITY = {
             "매우 많이 있었다", "많이 있었다", "어느 정도 있었다", "조금 있었다", "전혀 없었다"
     };
@@ -49,7 +50,7 @@ public final class EmaQuestionBank {
 
     private static final String[] EMOJIS_AGREE = {"😊", "🙂", "😐", "🙁", "😢"};
 
-    /** 화면 위→아래 고정: 초록 → 연두 → 노랑 → 주황 → 빨강 */
+    /** 화면 위→아래: NEGATIVE 기본 초록→빨강. POSITIVE 면 서버 polarity 에 따라 뒤집음. */
     private static final int[] COLORS_GOOD_TO_BAD = {
             0xFF2E7D32,
             0xFF8BC34A,
@@ -117,8 +118,10 @@ public final class EmaQuestionBank {
     }
 
     /**
-     * 화면 위→아래: NEGATIVE(기본)는 초록→빨강.
-     * POSITIVE만 이모지 순서를 뒤집어 맨 아래(매우 그렇다)가 초록 웃음이 되게 한다.
+     * 서버 값만 따른다.
+     * - 선택지 글자: 호출측에서 서버 options 순서를 그대로 넣음
+     * - 얼굴: polarity==POSITIVE 이면 위→아래를 뒤집고, 그 외(NEGATIVE/없음)는 초록→빨강
+     * 서버 options·polarity 조합이 어색해도 앱에서 보정하지 않는다.
      */
     public static int drawableResFor(Item item, int displayIndex) {
         return drawableResFor(item, displayIndex, null, null);

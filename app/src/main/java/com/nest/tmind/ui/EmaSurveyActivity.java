@@ -94,10 +94,12 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
             } else if (serverQuestionCount <= 0 && remoteQuestionIds != null) {
                 serverQuestionCount = remoteQuestionIds.length;
             }
-            if (hasRemoteQuestionIds() && remotePolarities == null) {
-                java.util.List<ApiModels.QuestionResponse> cachedPolarity = loadRemoteQuestions();
-                if (cachedPolarity != null && !cachedPolarity.isEmpty()) {
-                    applyRemoteQuestions(cachedPolarity);
+            // 회전 등으로 ID만 복구되고 options/polarity 가 비면 캐시에서 다시 채운다.
+            if (hasRemoteQuestionIds()
+                    && (remotePolarities == null || remoteOptionLabels == null || remotePrompts == null)) {
+                java.util.List<ApiModels.QuestionResponse> cached = loadRemoteQuestions();
+                if (cached != null && !cached.isEmpty()) {
+                    applyRemoteQuestions(cached);
                 }
             }
         }
@@ -160,6 +162,7 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         outState.putLongArray("remoteQuestionIds", remoteQuestionIds);
         outState.putStringArray("remotePrompts", remotePrompts);
         outState.putStringArray("remotePolarities", remotePolarities);
+        outState.putStringArray("remoteOptionLabelsFlat", flattenOptionLabels(remoteOptionLabels));
     }
 
     @Override
@@ -178,6 +181,39 @@ public class EmaSurveyActivity extends BaseSeniorActivity {
         if (polarities != null && polarities.length > 0) {
             remotePolarities = polarities;
         }
+        String[] flat = savedInstanceState.getStringArray("remoteOptionLabelsFlat");
+        if (flat != null && flat.length > 0 && serverQuestionCount > 0) {
+            remoteOptionLabels = unflattenOptionLabels(flat, serverQuestionCount);
+        }
+    }
+
+    /** Bundle 저장용: 문항별 5개 라벨을 이어 붙인다. */
+    private static String[] flattenOptionLabels(String[][] labels) {
+        if (labels == null || labels.length == 0) return null;
+        String[] flat = new String[labels.length * 5];
+        for (int i = 0; i < labels.length; i++) {
+            String[] row = labels[i];
+            for (int j = 0; j < 5; j++) {
+                flat[i * 5 + j] = (row != null && j < row.length) ? row[j] : "";
+            }
+        }
+        return flat;
+    }
+
+    private static String[][] unflattenOptionLabels(String[] flat, int questionCount) {
+        if (flat == null || questionCount <= 0) return null;
+        String[][] out = new String[questionCount][];
+        for (int i = 0; i < questionCount; i++) {
+            if ((i * 5 + 4) >= flat.length) break;
+            String[] row = new String[5];
+            boolean any = false;
+            for (int j = 0; j < 5; j++) {
+                row[j] = flat[i * 5 + j];
+                if (row[j] != null && !row[j].isEmpty()) any = true;
+            }
+            out[i] = any ? row : null;
+        }
+        return out;
     }
 
     private java.util.List<ApiModels.QuestionResponse> loadRemoteQuestions() {
